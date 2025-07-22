@@ -359,3 +359,46 @@ export async function resetUserProgressInDB(userId: string, taluka: string): Pro
 
     return bundleNoToRecycle;
 }
+
+
+
+/**
+ * Force-completes a specific bundle.
+ * This marks the bundle as complete in processedRecords and clears the
+ * user's active state if it matches the bundle being completed.
+ * @param userId - The UID of the user associated with the bundle.
+ * @param location - The location slug of the bundle.
+ * @param taluka - The taluka of the bundle.
+ * @param bundleNo - The number of the bundle to complete.
+ */
+export async function forceCompleteBundleInDB(
+    userId: string,
+    location: string,
+    taluka: string,
+    bundleNo: number
+): Promise<void> {
+    const db = admin.database();
+    const updates: { [key: string]: any } = {};
+
+    // Mark the bundle as force-completed in the processedRecords.
+    // This creates a permanent record of the admin's action.
+    const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}`;
+    updates[`${recordPath}/isForceCompleted`] = true;
+    updates[`${recordPath}/forceCompletedBy`] = 'admin'; // Or the admin's UID
+
+    // Check if the specified user's active bundle matches the one being completed.
+    const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
+    const activeBundleSnapshot = await userStateRef.once('value');
+
+    if (activeBundleSnapshot.exists()) {
+        const activeBundle: ActiveBundle = activeBundleSnapshot.val();
+        // Only clear the user's state if it's the exact bundle we are completing.
+        // This prevents clearing a new bundle if the user has already moved on.
+        if (activeBundle.bundleNo === bundleNo) {
+            updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
+        }
+    }
+
+    // Apply all changes in a single multi-path update.
+    await db.ref().update(updates);
+}

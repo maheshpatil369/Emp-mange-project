@@ -44,3 +44,35 @@ export const resetUserProgress = async (req: Request, res: Response): Promise<Re
         return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+
+
+/**
+ * Controller to manually mark a bundle as complete.
+ * This is an admin-only operation.
+ */
+export const forceCompleteBundle = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const { userId, taluka, bundleNo } = req.body;
+
+        if (!userId || !taluka || !bundleNo) {
+            return res.status(400).json({ message: 'Bad Request: "userId", "taluka", and "bundleNo" are required.' });
+        }
+
+        // The service needs the location, which we can get from the user's profile.
+        const user = await firebaseService.getUserFromDB(userId);
+        if (!user) {
+            return res.status(404).json({ message: `User with ID ${userId} not found.` });
+        }
+
+        await firebaseService.forceCompleteBundleInDB(userId, user.location, taluka, bundleNo);
+
+        return res.status(200).json({
+            message: `Successfully marked bundle #${bundleNo} in ${taluka} as complete.`
+        });
+
+    } catch (error: any) {
+        console.error('Error force-completing bundle:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
