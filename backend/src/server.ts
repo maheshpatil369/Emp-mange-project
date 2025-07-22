@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import { initializeAdminApp } from "./config/firebase.config";
 import userRoutes from "./api/routes/user.routes";
 import dataRoutes from './api/routes/data.routes'; 
+import adminRoutes from './api/routes/admin.routes';
+
 // import generateAdminToken from './generate-token';
 
 dotenv.config();
@@ -24,6 +26,9 @@ app.use(express.json());
 
 app.use("/api/users", userRoutes);
 app.use('/api/data', dataRoutes);
+app.use('/api/admin', adminRoutes);
+
+
 
 // A simple route to verify that the server is running correctly.
 app.get("/", (req: Request, res: Response) => {

@@ -285,3 +285,22 @@ export async function getActiveBundlesFromDB(userId: string): Promise<{ [taluka:
 
     return snapshot.val();
 }
+
+
+
+/**
+ * Fetches all bundle counters from the database.
+ * This provides a snapshot of the entire system's bundle assignment state.
+ * @returns A promise that resolves to the bundle counters object or null if none exist.
+ */
+export async function getBundleCountersFromDB(): Promise<{ [location: string]: { [taluka: string]: BundleCounter } } | null> {
+    const db = admin.database();
+    const countersRef = db.ref('bundleCounters');
+    const snapshot = await countersRef.once('value');
+
+    if (!snapshot.exists()) {
+        return null;
+    }
+
+    return snapshot.val();
+}
