@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import * as firebaseService from '../../services/firebase.service';
+import * as exportService from '../../services/export.service'; 
+
 
 /**
  * Controller to get the status of all bundle counters.
@@ -103,3 +105,45 @@ export const manualAssignBundle = async (req: Request, res: Response): Promise<R
         return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+
+/**
+ * Controller to export all processed records for a location as an Excel file.
+ * This is an admin-only operation.
+ */
+export const exportProcessedData = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { location } = req.params;
+        if (!location) {
+            res.status(400).json({ message: 'Bad Request: "location" parameter is required.' });
+            return;
+        }
+
+        // Fetch all necessary data in parallel.
+        const [records, users] = await Promise.all([
+            firebaseService.getProcessedRecordsByLocationFromDB(location),
+            firebaseService.getAllUsersFromDB()
+        ]);
+
+        if (records.length === 0) {
+            res.status(404).json({ message: `No processed records found for location: ${location}` });
+            return;
+        }
+
+        // Generate the Excel file buffer using the export service.
+        const fileBuffer = await exportService.generateProcessedRecordsExcel(records, users);
+
+        // Set the response headers to trigger a file download.
+        const fileName = `${location}-processed-records-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+        // Send the file buffer as the response.
+        res.send(fileBuffer);
+
+    } catch (error: any) {
+        console.error('Error exporting processed data:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+

@@ -432,3 +432,38 @@ export async function manualAssignBundleToUserInDB(
 
     return newBundle;
 }
+
+
+
+/**
+ * Fetches all processed records for a given location, flattening the nested structure.
+ * @param location - The location slug (e.g., "akola").
+ * @returns A promise that resolves to an array of all processed records for that location.
+ */
+export async function getProcessedRecordsByLocationFromDB(location: string): Promise<ProcessedRecord[]> {
+    const db = admin.database();
+    const locationRef = db.ref(`processedRecords/${location}`);
+    const snapshot = await locationRef.once('value');
+
+    if (!snapshot.exists()) {
+        return [];
+    }
+
+    const allRecords: ProcessedRecord[] = [];
+    const talukaData = snapshot.val();
+
+    // The data is nested: taluka -> bundle -> record. We need to flatten it.
+    for (const taluka in talukaData) {
+        for (const bundle in talukaData[taluka]) {
+            const recordsInBundle = talukaData[taluka][bundle];
+            for (const recordId in recordsInBundle) {
+                // Ignore metadata fields like isForceCompleted at the bundle level
+                if (typeof recordsInBundle[recordId] === 'object') {
+                    allRecords.push(recordsInBundle[recordId]);
+                }
+            }
+        }
+    }
+
+    return allRecords;
+}
