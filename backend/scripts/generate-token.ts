@@ -5,7 +5,7 @@
 
 import dotenv from "dotenv";
 import admin from "firebase-admin";
-import { initializeAdminApp } from "./config/firebase.config";
+import { initializeAdminApp } from "../src/config/firebase.config";
 
 // Load environment variables from the .env file
 dotenv.config();
@@ -13,7 +13,7 @@ dotenv.config();
 /**
  * Generates a Firebase ID token for the Admin user.
  */
-export default async function generateAdminToken() {
+async function generateAdminToken() {
   console.log("Initializing Firebase Admin SDK...");
   initializeAdminApp();
 
@@ -83,3 +83,4 @@ export default async function generateAdminToken() {
   }
 }
 
+generateAdminToken();
