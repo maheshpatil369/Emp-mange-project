@@ -304,3 +304,58 @@ export async function getBundleCountersFromDB(): Promise<{ [location: string]: {
 
     return snapshot.val();
 }
+
+
+
+/**
+ * Resets a user's progress for a specific taluka.
+ * This involves deleting their processed records for the active bundle,
+ * clearing their active bundle state, and recycling the bundle number.
+ * @param userId - The UID of the user to reset.
+ * @param taluka - The taluka for which to reset progress.
+ * @returns The bundle number that was recycled.
+ */
+export async function resetUserProgressInDB(userId: string, taluka: string): Promise<number> {
+    const db = admin.database();
+    
+    // Find the user's profile to get their location.
+    const user = await getUserFromDB(userId);
+    if (!user) {
+        throw new Error(`User with ID ${userId} not found.`);
+    }
+    const location = user.location;
+
+    // Find the user's active bundle for the specified taluka.
+    const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
+    const activeBundleSnapshot = await userStateRef.once('value');
+    if (!activeBundleSnapshot.exists()) {
+        throw new Error(`No active bundle found for user in taluka ${taluka}.`);
+    }
+    const activeBundle: ActiveBundle = activeBundleSnapshot.val();
+    const bundleNoToRecycle = activeBundle.bundleNo;
+
+    // Prepare a multi-path update to delete the user's state and the bundle's data.
+    // By deleting the entire bundle, we ensure data integrity.
+    const updates: { [key: string]: null } = {};
+    updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
+    updates[`/processedRecords/${location}/${taluka}/bundle-${bundleNoToRecycle}`] = null;
+
+    await db.ref().update(updates);
+
+    // Atomically add the recycled bundle number to the 'gaps' array.
+    const bundleCounterRef = db.ref(`bundleCounters/${location}/${taluka}`);
+    await bundleCounterRef.transaction((currentData: BundleCounter | null) => {
+        if (currentData) {
+            if (!currentData.gaps) {
+                currentData.gaps = [];
+            }
+            // Ensure the bundle number isn't already in the gaps list
+            if (!currentData.gaps.includes(bundleNoToRecycle)) {
+                currentData.gaps.push(bundleNoToRecycle);
+            }
+        }
+        return currentData;
+    });
+
+    return bundleNoToRecycle;
+}

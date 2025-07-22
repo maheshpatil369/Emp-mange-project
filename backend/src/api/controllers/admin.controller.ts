@@ -20,3 +20,27 @@ export const getBundleCountersStatus = async (req: Request, res: Response): Prom
         return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+
+export const resetUserProgress = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const { userId, taluka } = req.body;
+
+        if (!userId || !taluka) {
+            return res.status(400).json({ message: 'Bad Request: "userId" and "taluka" are required.' });
+        }
+
+        const recycledBundleNo = await firebaseService.resetUserProgressInDB(userId, taluka);
+
+        return res.status(200).json({
+            message: `Successfully reset progress for user ${userId} in ${taluka}. Bundle #${recycledBundleNo} has been recycled.`
+        });
+
+    } catch (error: any) {
+        if (error.message.includes('No active bundle found') || error.message.includes('not found')) {
+            return res.status(404).json({ message: error.message });
+        }
+        console.error('Error resetting user progress:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
