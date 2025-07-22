@@ -2,7 +2,7 @@
 
 import { Router } from "express";
 import multer from "multer";
-import { assignBundle, syncRecords, uploadFile } from "../controllers/data.controller";
+import { assignBundle, completeBundle, getActiveBundles, syncRecords, uploadFile } from "../controllers/data.controller";
 import { isAuthenticated, isAdmin } from "../middleware/auth.middleware";
 
 // Configure Multer to handle file uploads in memory.
@@ -11,6 +11,11 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 const router = Router();
+
+
+// GET /api/data/bundles/active (Any authenticated user)
+router.get('/bundles/active', isAuthenticated, getActiveBundles);
+
 
 // POST /api/data/upload/:location
 // This route handles the Excel file upload.
@@ -32,6 +37,9 @@ router.post('/bundles/assign', isAuthenticated, assignBundle);
 
 // POST /api/data/records/sync (Any authenticated user)
 router.post('/records/sync', isAuthenticated, syncRecords);
+
+// POST /api/data/bundles/complete (Any authenticated user)
+router.post('/bundles/complete', isAuthenticated, completeBundle);
 
 
 export default router;

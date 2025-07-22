@@ -160,3 +160,61 @@ export const syncRecords = async (req: Request, res: Response): Promise<Response
         return res.status(500).json({ message: 'Internal Server Error: Could not sync records.' });
     }
 };
+
+
+
+/**
+ * Controller to mark the authenticated user's active bundle as complete.
+ */
+export const completeBundle = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const userId = req.user?.uid;
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthorized: User not authenticated.' });
+        }
+
+        const { taluka } = req.body;
+        if (!taluka) {
+            return res.status(400).json({ message: 'Bad Request: "taluka" is required.' });
+        }
+
+        await firebaseService.markBundleAsCompleteInDB(userId, taluka);
+
+        return res.status(200).json({
+            message: `Successfully marked bundle for ${taluka} as complete. You can now assign a new one.`
+        });
+
+    } catch (error: any) {
+        // Handle specific error from our service if no active bundle was found.
+        if (error.message.includes('No active bundle found')) {
+            return res.status(404).json({ message: error.message });
+        }
+        console.error('Error completing bundle:', error);
+        return res.status(500).json({ message: 'Internal Server Error: Could not complete bundle.' });
+    }
+};
+
+
+/**
+ * Controller to get the authenticated user's active work bundles.
+ */
+export const getActiveBundles = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const userId = req.user?.uid;
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthorized: User not authenticated.' });
+        }
+
+        const activeBundles = await firebaseService.getActiveBundlesFromDB(userId);
+
+        if (!activeBundles) {
+            return res.status(200).json({ message: 'User has no active bundles.' });
+        }
+
+        return res.status(200).json(activeBundles);
+
+    } catch (error: any) {
+        console.error('Error fetching active bundles:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};

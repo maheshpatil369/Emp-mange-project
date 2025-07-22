@@ -243,3 +243,45 @@ export async function saveProcessedRecordsToDB(
     // Perform a multi-path update to save all records in one go.
     await recordsRef.update(updates);
 }
+
+
+
+
+/**
+ * Marks a user's active bundle for a specific taluka as complete by deleting it.
+ * @param userId - The UID of the user completing the bundle.
+ * @param taluka - The taluka of the bundle to be marked as complete.
+ */
+export async function markBundleAsCompleteInDB(userId: string, taluka: string): Promise<void> {
+    const db = admin.database();
+    const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
+
+    // Check if the bundle state actually exists before trying to remove it.
+    const snapshot = await userStateRef.once('value');
+    if (!snapshot.exists()) {
+        throw new Error(`No active bundle found for user in taluka ${taluka} to mark as complete.`);
+    }
+
+    // Remove the entry from the database.
+    await userStateRef.remove();
+}
+
+
+/**
+ * Fetches the active bundle states for a given user.
+ * @param userId - The UID of the user.
+ * @returns A promise that resolves to an object containing the user's active bundles,
+ * keyed by taluka, or null if none exist.
+ */
+export async function getActiveBundlesFromDB(userId: string): Promise<{ [taluka: string]: ActiveBundle } | null> {
+    const db = admin.database();
+    const userStateRef = db.ref(`userStates/${userId}/activeBundles`);
+
+    const snapshot = await userStateRef.once('value');
+
+    if (!snapshot.exists()) {
+        return null;
+    }
+
+    return snapshot.val();
+}
