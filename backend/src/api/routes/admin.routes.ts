@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { forceCompleteBundle, getBundleCountersStatus, resetUserProgress } from '../controllers/admin.controller';
+import { forceCompleteBundle, getBundleCountersStatus, manualAssignBundle, resetUserProgress } from '../controllers/admin.controller';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -14,6 +14,9 @@ router.post('/reset-progress', isAuthenticated, isAdmin, resetUserProgress);
 
 // POST /api/admin/force-complete
 router.post('/force-complete', isAuthenticated, isAdmin, forceCompleteBundle);
+
+// POST /api/admin/manual-assign
+router.post('/manual-assign', isAuthenticated, isAdmin, manualAssignBundle);
 
 
 export default router;

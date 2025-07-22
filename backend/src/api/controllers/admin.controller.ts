@@ -76,3 +76,30 @@ export const forceCompleteBundle = async (req: Request, res: Response): Promise<
         return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+
+
+/**
+ * Controller to manually assign a specific bundle to a user.
+ * This is an admin-only operation.
+ */
+export const manualAssignBundle = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const { userId, taluka, bundleNo } = req.body;
+
+        if (!userId || !taluka || !bundleNo) {
+            return res.status(400).json({ message: 'Bad Request: "userId", "taluka", and "bundleNo" are required.' });
+        }
+
+        const assignedBundle = await firebaseService.manualAssignBundleToUserInDB(userId, taluka, bundleNo);
+
+        return res.status(200).json({
+            message: `Successfully assigned bundle #${assignedBundle.bundleNo} to user ${userId} for ${taluka}.`,
+            bundle: assignedBundle
+        });
+
+    } catch (error: any) {
+        console.error('Error manually assigning bundle:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};

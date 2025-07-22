@@ -402,3 +402,33 @@ export async function forceCompleteBundleInDB(
     // Apply all changes in a single multi-path update.
     await db.ref().update(updates);
 }
+
+
+/**
+ * Manually assigns a specific bundle number to a user for a given taluka.
+ * This will overwrite any existing active bundle for that taluka.
+ * @param userId - The UID of the user to assign the bundle to.
+ * @param taluka - The taluka for the assignment.
+ * @param bundleNo - The specific bundle number to assign.
+ */
+export async function manualAssignBundleToUserInDB(
+    userId: string,
+    taluka: string,
+    bundleNo: number
+): Promise<ActiveBundle> {
+    const db = admin.database();
+    const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
+
+    // Create the new bundle object that will be force-assigned.
+    const newBundle: ActiveBundle = {
+        bundleNo: bundleNo,
+        count: 0, // Reset the count for the new bundle
+        taluka: taluka,
+    };
+
+    // Use `set` to completely overwrite the user's current active bundle
+    // for this taluka with the new one.
+    await userStateRef.set(newBundle);
+
+    return newBundle;
+}
