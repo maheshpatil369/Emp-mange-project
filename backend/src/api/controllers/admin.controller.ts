@@ -147,3 +147,30 @@ export const exportProcessedData = async (req: Request, res: Response): Promise<
     }
 };
 
+
+
+/**
+ * [DANGER ZONE] Controller to reset all processed data in the system.
+ */
+export const resetAllProcessedData = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        await firebaseService.resetAllProcessedDataInDB();
+        return res.status(200).json({ message: 'DANGER ZONE: All processed data has been permanently deleted.' });
+    } catch (error: any) {
+        console.error('Error resetting all processed data:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+/**
+ * [DANGER ZONE] Controller to reset all bundle counters and user states.
+ */
+export const resetAllCounters = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        await firebaseService.resetAllCountersInDB();
+        return res.status(200).json({ message: 'DANGER ZONE: All bundle counters and user states have been reset.' });
+    } catch (error: any) {
+        console.error('Error resetting all counters:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};

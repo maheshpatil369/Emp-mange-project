@@ -467,3 +467,28 @@ export async function getProcessedRecordsByLocationFromDB(location: string): Pro
 
     return allRecords;
 }
+
+
+
+/**
+ * [DANGER ZONE] Deletes all processed records from the entire database.
+ * This is an irreversible operation.
+ */
+export async function resetAllProcessedDataInDB(): Promise<void> {
+    const db = admin.database();
+    const processedRecordsRef = db.ref('processedRecords');
+    await processedRecordsRef.remove();
+}
+
+/**
+ * [DANGER ZONE] Deletes all bundle counters and user states from the database.
+ * This resets the entire bundle assignment system.
+ */
+export async function resetAllCountersInDB(): Promise<void> {
+    const db = admin.database();
+    const updates: { [key: string]: null } = {};
+    updates['/bundleCounters'] = null;
+    updates['/userStates'] = null;
+    await db.ref().update(updates);
+}
+
