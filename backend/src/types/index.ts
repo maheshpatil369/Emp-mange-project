@@ -9,6 +9,19 @@ export interface User {
   role: "Admin" | "User";
 }
 
+// Defines the structure of an active bundle in /userStates
+export interface ActiveBundle {
+  taluka: string;
+  count: number;
+  bundleNo: number;
+}
+
+// Defines the structure of a bundle counter in /bundleCounters
+export interface BundleCounter {
+  nextBundle: number;
+  gaps?: number[];
+}
+
 // This block adds a new 'user' property to the global Express Request type.
 // This allows us to safely attach the authenticated user's data to the
 // request object in our middleware and access it in our controllers.

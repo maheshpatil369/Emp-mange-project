@@ -80,3 +80,44 @@ export const uploadFile = async (
       .json({ message: "Internal Server Error: Could not process file." });
   }
 };
+
+
+
+/**
+ * Controller to assign a new work bundle to the authenticated user.
+ */
+export const assignBundle = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const userId = req.user?.uid;
+        if (!userId) {
+            // This should technically be caught by middleware, but it's good practice
+            return res.status(401).json({ message: 'Unauthorized: User not authenticated.' });
+        }
+
+        const { taluka } = req.body;
+        if (!taluka) {
+            return res.status(400).json({ message: 'Bad Request: "taluka" is required.' });
+        }
+        
+        // We need the user's location, which is stored in their profile.
+        const user = await firebaseService.getUserFromDB(userId);
+        if (!user || !user.location) {
+            return res.status(404).json({ message: 'User profile or location not found.' });
+        }
+        
+        // Call the service to perform the transactional assignment
+        const newBundle = await firebaseService.assignNewBundleToUser(userId, user.location, taluka);
+
+        return res.status(200).json({
+            message: `Successfully assigned bundle #${newBundle.bundleNo} for ${taluka}.`,
+            bundle: newBundle,
+        });
+
+    } catch (error: any) {
+        if (error.message.includes('User already has an active bundle')) {
+            return res.status(409).json({ message: error.message });
+        }
+        console.error('Error assigning bundle:', error);
+        return res.status(500).json({ message: 'Internal Server Error: Could not assign bundle.' });
+    }
+};
