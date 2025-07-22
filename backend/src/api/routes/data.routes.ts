@@ -2,7 +2,7 @@
 
 import { Router } from "express";
 import multer from "multer";
-import { assignBundle, uploadFile } from "../controllers/data.controller";
+import { assignBundle, syncRecords, uploadFile } from "../controllers/data.controller";
 import { isAuthenticated, isAdmin } from "../middleware/auth.middleware";
 
 // Configure Multer to handle file uploads in memory.
@@ -29,6 +29,9 @@ router.post(
 
 // POST /api/data/bundles/assign (Any authenticated user)
 router.post('/bundles/assign', isAuthenticated, assignBundle);
+
+// POST /api/data/records/sync (Any authenticated user)
+router.post('/records/sync', isAuthenticated, syncRecords);
 
 
 export default router;

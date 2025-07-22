@@ -22,6 +22,20 @@ export interface BundleCounter {
   gaps?: number[];
 }
 
+// Defines the structure for a single processed record that will be
+// saved to the /processedRecords path.
+export interface ProcessedRecord {
+  // These fields are added by the backend
+  uniqueId: string;
+  bundleNo: number;
+  processedBy: string;
+  processedAt: string;
+  sourceFile: string;
+  taluka: string; 
+  // The rest of the fields are dynamic, coming from the user's input
+  [key: string]: any;
+}
+
 // This block adds a new 'user' property to the global Express Request type.
 // This allows us to safely attach the authenticated user's data to the
 // request object in our middleware and access it in our controllers.

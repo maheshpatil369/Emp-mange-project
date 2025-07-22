@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import { User, ActiveBundle, BundleCounter } from "../types";
+import { User, ActiveBundle, BundleCounter, ProcessedRecord } from '../types';
 
 /**
  * Fetches all user profiles from the '/users' path in the Realtime Database.
@@ -168,4 +168,78 @@ export async function assignNewBundleToUser(
   await userStateRef.set(newBundle);
 
   return newBundle;
+}
+
+
+
+
+/**
+ * Generates a unique ID prefix based on location and taluka names.
+ * Example: "chhatrapati-sambhajinagar", "Paithan" -> "CSPA"
+ * @param location - The location name.
+ * @param taluka - The taluka name.
+ * @returns A 4-letter prefix string.
+ */
+function generateIdPrefix(location: string, taluka: string): string {
+    const locationPrefix = location.substring(0, 2).toUpperCase();
+    const talukaPrefix = taluka.substring(0, 2).toUpperCase();
+    return `${locationPrefix}${talukaPrefix}`;
+}
+
+
+
+/**
+ * Saves a batch of processed records to the database.
+ * This function handles unique ID generation and batch writing.
+ * @param userId - The UID of the user submitting the records.
+ * @param location - The user's location slug.
+ * @param taluka - The taluka the records belong to.
+ * @param bundleNo - The bundle number for these records.
+ * @param records - An array of records to save.
+ * @param sourceFile - The name of the original file the data came from.
+ */
+export async function saveProcessedRecordsToDB(
+  userId: string,
+  location: string,
+  taluka: string,
+  bundleNo: number,
+  records: any[],
+  sourceFile: string 
+): Promise<void> {
+    const db = admin.database();
+    const idCounterRef = db.ref(`idCounters/${location}/${taluka}`);
+    const recordsRef = db.ref(`processedRecords/${location}/${taluka}/bundle-${bundleNo}`);
+    const updates: { [key: string]: ProcessedRecord } = {};
+
+    // Generate a unique ID for each record in the batch.
+    for (const record of records) {
+        // Run a transaction to get the next sequential ID safely.
+        const { snapshot } = await idCounterRef.transaction((currentData: { lastId: number } | null) => {
+            if (currentData === null) {
+                return { lastId: 1 };
+            }
+            currentData.lastId++;
+            return currentData;
+        });
+
+        const newId = snapshot.val().lastId;
+        const prefix = generateIdPrefix(location, taluka);
+        const uniqueId = `${prefix}${newId}`;
+        
+        // Construct the full record object with all required metadata
+        const newRecord: ProcessedRecord = {
+            ...record, // The user-submitted data
+            uniqueId: uniqueId,
+            bundleNo: bundleNo,
+            processedBy: userId,
+            processedAt: new Date().toISOString(),
+            sourceFile: sourceFile, 
+            taluka: taluka,
+        };
+        
+        updates[uniqueId] = newRecord;
+    }
+
+    // Perform a multi-path update to save all records in one go.
+    await recordsRef.update(updates);
 }

@@ -121,3 +121,42 @@ export const assignBundle = async (req: Request, res: Response): Promise<Respons
         return res.status(500).json({ message: 'Internal Server Error: Could not assign bundle.' });
     }
 };
+
+
+
+
+/**
+ * Controller to receive and save a batch of processed records.
+ */
+export const syncRecords = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const userId = req.user?.uid;
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthorized: User not authenticated.' });
+        }
+
+        // Updated to include sourceFile
+        const { taluka, bundleNo, records, sourceFile } = req.body;
+
+        // Basic validation
+        if (!taluka || !bundleNo || !sourceFile || !Array.isArray(records) || records.length === 0) {
+            return res.status(400).json({ message: 'Bad Request: "taluka", "bundleNo", "sourceFile", and a non-empty "records" array are required.' });
+        }
+
+        const user = await firebaseService.getUserFromDB(userId);
+        if (!user || !user.location) {
+            return res.status(404).json({ message: 'User profile or location not found.' });
+        }
+
+        // Call the service to save the batch of records
+        await firebaseService.saveProcessedRecordsToDB(userId, user.location, taluka, bundleNo, records, sourceFile);
+
+        return res.status(200).json({
+            message: `Successfully synced ${records.length} records for bundle #${bundleNo}.`
+        });
+
+    } catch (error: any) {
+        console.error('Error syncing records:', error);
+        return res.status(500).json({ message: 'Internal Server Error: Could not sync records.' });
+    }
+};
