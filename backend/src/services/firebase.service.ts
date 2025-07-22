@@ -54,3 +54,28 @@ export async function createUserInDB(userData: Omit<User, "id">) {
 
   return userRecord;
 }
+
+
+/**
+ * Saves the parsed content of an uploaded file to the Realtime Database.
+ * @param location - The location slug (e.g., "akola").
+ * @param fileData - The file metadata and its parsed JSON content.
+ * @returns The unique key (ID) of the new file record in Firebase.
+ */
+export async function saveUploadedFileToDB(location: string, fileData: any): Promise<string> {
+  const db = admin.database();
+  const filesRef = db.ref(`files/${location}`);
+  
+  // Push the new file data to the database, which generates a unique key.
+  const newFileRef = filesRef.push();
+  
+  const dataToSave = {
+      id: newFileRef.key, // Save the generated key as part of the data
+      ...fileData
+  };
+
+  await newFileRef.set(dataToSave);
+  
+  // Return the unique key of the newly created record.
+  return newFileRef.key!;
+}
