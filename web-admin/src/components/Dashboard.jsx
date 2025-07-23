@@ -1,113 +1,154 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../services/AuthContext';
+
+import React, { useState, useEffect } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import {
   Users,
-  Upload,
-  BarChart3,
-  Settings,
-  LogOut,
-  Database,
+  FileText,
+  CheckCircle,
+  Clock,
+  Package,
+  Loader2,
   AlertTriangle,
-  FileDown,
-  UserPlus
-} from 'lucide-react';
+  FileWarning,
+} from "lucide-react";
+import apiClient from "../lib/axios"; // Import our configured Axios instance
 
-// Import dashboard components
-import Analytics from './Analytics';
-import UsersManagement from './UsersManagement';
-import DataUpload from './DataUpload';
-import BundleManagement from './BundleManagement';
-import DangerZone from './DangerZone';
-import ExportData from './ExportData';
+// --- Main Dashboard Page Component ---
+const DashboardPage = () => {
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-function Dashboard() {
-  const location = useLocation();
-  const { currentUser, logout } = useAuth();
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setError("");
+        setLoading(true);
+        // Fetch the comprehensive analytics data from our backend
+        const response = await apiClient.get("/admin/analytics");
+        setAnalyticsData(response.data);
+      } catch (err) {
+        console.error("Failed to fetch analytics data:", err);
+        setError("Could not load dashboard data. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const navigation = [
-    { name: 'Analytics', href: '/', icon: BarChart3, current: location.pathname === '/' },
-    { name: 'Users', href: '/users', icon: Users, current: location.pathname === '/users' },
-    { name: 'Data Upload', href: '/upload', icon: Upload, current: location.pathname === '/upload' },
-    { name: 'Bundle Management', href: '/bundles', icon: Database, current: location.pathname === '/bundles' },
-    { name: 'Export Data', href: '/export', icon: FileDown, current: location.pathname === '/export' },
-    { name: 'Danger Zone', href: '/danger', icon: AlertTriangle, current: location.pathname === '/danger' },
-  ];
+    fetchAnalytics();
+  }, []);
 
-  const handleSignOut = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
+        <p className="ml-2 text-gray-600">Loading Dashboard...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full text-red-600 bg-red-50 p-4 rounded-lg">
+        <AlertTriangle className="w-6 h-6 mr-2" /> {error}
+      </div>
+    );
+  }
+
+  // Destructure the data for easier use
+  const stats = analyticsData?.topLevelStats;
+  const locationData = analyticsData?.recordsByLocation;
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-gray-900">
-        <div className="flex h-16 shrink-0 items-center px-6">
-          <h1 className="text-xl font-bold text-white">Admin Dashboard</h1>
-        </div>
-        <nav className="mt-8">
-          <ul role="list" className="flex flex-col gap-y-1 px-6">
-            {navigation.map((item) => (
-              <li key={item.name}>
-                <Link
-                  to={item.href}
-                  className={`group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold ${
-                    item.current
-                      ? 'bg-gray-800 text-white'
-                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                  }`}
-                >
-                  <item.icon className="h-6 w-6 shrink-0" />
-                  {item.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        
-        {/* User info and sign out */}
-        <div className="absolute bottom-0 w-full p-6 border-t border-gray-800">
-          <div className="flex items-center gap-x-3 mb-4">
-            <div className="h-8 w-8 rounded-full bg-gray-600 flex items-center justify-center">
-              <span className="text-sm font-medium text-white">
-                {currentUser?.email?.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div className="text-sm text-gray-300 truncate">
-              {currentUser?.email}
-            </div>
-          </div>
-          <button
-            onClick={handleSignOut}
-            className="flex w-full items-center gap-x-3 rounded-md p-2 text-sm font-semibold text-gray-400 hover:text-white hover:bg-gray-800"
-          >
-            <LogOut className="h-6 w-6" />
-            Sign Out
-          </button>
-        </div>
+    <div className="space-y-8">
+      <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
+
+      {/* Statistic Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+        <StatCard
+          icon={<FileText />}
+          title="Total Excel Records"
+          value={stats?.totalExcelRecords}
+        />
+        <StatCard
+          icon={<CheckCircle />}
+          title="Completed Records"
+          value={stats?.completedRecords}
+          color="text-green-500"
+        />
+        <StatCard
+          icon={<Clock />}
+          title="Pending Records"
+          value={stats?.pendingRecords}
+          color="text-orange-500"
+        />
+        <StatCard
+          icon={<FileWarning />}
+          title="PDFs Required"
+          value={stats?.pdfRequired}
+          color="text-red-500"
+        />
+        <StatCard
+          icon={<Users />}
+          title="Registered Users"
+          value={stats?.registeredUsers}
+        />
+        <StatCard
+          icon={<Package />}
+          title="Active Bundles"
+          value={stats?.activeBundles}
+        />
       </div>
 
-      {/* Main content */}
-      <div className="pl-64">
-        <main className="py-8">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <Routes>
-              <Route path="/" element={<Analytics />} />
-              <Route path="/users" element={<UsersManagement />} />
-              <Route path="/upload" element={<DataUpload />} />
-              <Route path="/bundles" element={<BundleManagement />} />
-              <Route path="/export" element={<ExportData />} />
-              <Route path="/danger" element={<DangerZone />} />
-            </Routes>
-          </div>
-        </main>
+      {/* Charts Section */}
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h2 className="text-xl font-semibold text-gray-700 mb-4">
+          Processed Records by Location
+        </h2>
+        <div style={{ width: "100%", height: 400 }}>
+          <ResponsiveContainer>
+            <BarChart
+              data={locationData}
+              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="value" fill="#4f46e5" name="Records Processed" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );
-}
+};
 
-export default Dashboard;
+// --- Helper Component for Statistic Cards ---
+const StatCard = ({ icon, title, value, color = "text-blue-500" }) => {
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-md flex items-center space-x-4">
+      <div className={`p-3 rounded-full bg-gray-100 ${color}`}>
+        {React.cloneElement(icon, { className: "w-6 h-6" })}
+      </div>
+      <div>
+        <p className="text-sm text-gray-500 font-medium">{title}</p>
+        <p className="text-2xl font-bold text-gray-800">
+          {value !== undefined ? value.toLocaleString() : "..."}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default DashboardPage;
