@@ -6,8 +6,12 @@ import {
   assignBundle,
   completeBundle,
   getActiveBundles,
+  getAssignedFile,
+  getConfig,
   getFileById,
   getFilesByLocation,
+  getNextUniqueId,
+  searchRecord,
   syncRecords,
   uploadFile,
 } from "../controllers/data.controller";
@@ -19,6 +23,10 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 const router = Router();
+
+// This endpoint is public so the app can fetch it before login if needed.
+router.get('/config', getConfig);
+
 
 // GET /api/data/bundles/active (Any authenticated user)
 router.get("/bundles/active", isAuthenticated, getActiveBundles);
@@ -52,5 +60,13 @@ router.get("/files/:location", isAuthenticated, isAdmin, getFilesByLocation);
 // GET /api/data/files/:location/:fileId (Admin only) - Gets a single file
 router.get('/files/:location/:fileId', isAuthenticated, isAdmin, getFileById);
 
+// GET /api/data/assigned-file (Authenticated User)
+router.get('/assigned-file', isAuthenticated, getAssignedFile);
+
+// GET /api/data/records/search (Authenticated User)
+router.get('/records/search', isAuthenticated, searchRecord);
+
+// GET /api/data/records/next-unique-id (Authenticated User)
+router.get('/records/next-unique-id', isAuthenticated, getNextUniqueId);
 
 export default router;

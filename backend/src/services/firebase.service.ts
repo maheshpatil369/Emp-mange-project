@@ -309,22 +309,57 @@ export async function markBundleAsCompleteInDB(userId: string, taluka: string): 
 
 
 /**
- * Fetches the active bundle states for a given user.
+ * Fetches the configuration data (locations and talukas).
+ */
+export async function getConfigFromDB(): Promise<any> {
+    const db = admin.database();
+    const configRef = db.ref('config');
+    const snapshot = await configRef.once('value');
+    return snapshot.val();
+}
+
+
+/**
+ * Fetches active bundles and enriches them with the total record count for that bundle.
  * @param userId - The UID of the user.
  * @returns A promise that resolves to an object containing the user's active bundles,
  * keyed by taluka, or null if none exist.
  */
-export async function getActiveBundlesFromDB(userId: string): Promise<{ [taluka: string]: ActiveBundle } | null> {
+export async function getActiveBundlesFromDB(userId: string): Promise<any | null> {
     const db = admin.database();
     const userStateRef = db.ref(`userStates/${userId}/activeBundles`);
+    const userSnapshot = await db.ref(`users/${userId}`).once('value');
+    const stateSnapshot = await userStateRef.once('value');
 
-    const snapshot = await userStateRef.once('value');
-
-    if (!snapshot.exists()) {
+    if (!stateSnapshot.exists() || !userSnapshot.exists()) {
         return null;
     }
 
-    return snapshot.val();
+    const user: User = { id: userId, ...userSnapshot.val() };
+    const activeBundles = stateSnapshot.val();
+
+    // If there's no assigned Excel file, we can't calculate totals.
+    if (!user.excelFile) return activeBundles;
+
+    // Find the source file in the database
+    const fileSnapshot = await db.ref('files').orderByChild('name').equalTo(user.excelFile).limitToFirst(1).once('value');
+    if (!fileSnapshot.exists()) return activeBundles;
+
+    const fileData = Object.values(fileSnapshot.val())[0] as any;
+    const totalRecordsInFile = fileData.content?.length || 0;
+    const BUNDLE_SIZE = 250; // Assuming a fixed bundle size
+
+    // Enrich each active bundle with the total count
+    for (const taluka in activeBundles) {
+        const bundle = activeBundles[taluka];
+        const startIndex = (bundle.bundleNo - 1) * BUNDLE_SIZE;
+        const endIndex = startIndex + BUNDLE_SIZE;
+        // Calculate the actual number of records in this specific bundle slice
+        const recordsInThisBundle = Math.min(BUNDLE_SIZE, totalRecordsInFile - startIndex);
+        bundle.totalRecords = recordsInThisBundle > 0 ? recordsInThisBundle : 0;
+    }
+
+    return activeBundles;
 }
 
 
@@ -601,7 +636,7 @@ export async function getDashboardSummaryFromDB() {
 
 
 /**
- * NEW: Gathers and computes all data needed for the entire Analytics page.
+ * Gathers and computes all data needed for the entire Analytics page.
  * This is an expensive operation as it processes all data in the database.
  * @param filters - Optional filters for the bundle summary.
  * @returns An object containing all aggregated analytics data.
@@ -762,4 +797,86 @@ export async function getFileByIdFromDB(location: string, fileId: string): Promi
         return null;
     }
     return snapshot.val();
+}
+
+
+
+/**
+ * Fetches the content of the Excel file assigned to a specific user.
+ * @param userId - The UID of the user.
+ * @returns The content of the assigned file or null if not found.
+ */
+export async function getAssignedFileContentFromDB(userId: string): Promise<any[] | null> {
+    const db = admin.database();
+    const user = await getUserFromDB(userId);
+
+    if (!user || !user.location || !user.excelFile) {
+        throw new Error('User profile is incomplete or has no file assigned.');
+    }
+
+    // Find the file by name. Note: This assumes file names are unique.
+    const filesRef = db.ref(`files/${user.location}`);
+    const snapshot = await filesRef.orderByChild('name').equalTo(user.excelFile).limitToFirst(1).once('value');
+
+    if (!snapshot.exists()) {
+        return null;
+    }
+
+    const fileData = Object.values(snapshot.val())[0] as any;
+    return fileData.content || [];
+}
+
+
+/**
+ * Searches for a raw, unprocessed record within a user's assigned file.
+ * @param userId - The UID of the user performing the search.
+ * @param searchId - The ID from the 'Search from' column to find.
+ * @returns The found record object or null.
+ */
+export async function searchRawRecordFromDB(userId: string, searchId: string): Promise<any | null> {
+    const fileContent = await getAssignedFileContentFromDB(userId);
+    if (!fileContent) {
+        return null;
+    }
+
+    // The 'Search from' column might have different names. We'll check for common variations.
+    const searchKeys = ['Search from', 'Search From', 'search from'];
+    const foundRecord = fileContent.find(record => {
+        for (const key of searchKeys) {
+            if (record[key] && String(record[key]).trim() === String(searchId).trim()) {
+                return true;
+            }
+        }
+        return false;
+    });
+
+    return foundRecord || null;
+}
+
+
+
+/**
+ * Gets the next available unique ID for a given taluka.
+ * @param location - The location slug.
+ * @param taluka - The taluka name.
+ * @returns The next unique ID string (e.g., "AHJA251").
+ */
+export async function getNextUniqueIdFromDB(location: string, taluka: string): Promise<string> {
+    const db = admin.database();
+    const idCounterRef = db.ref(`idCounters/${location}/${taluka}`);
+
+    // Run a transaction to safely get and increment the next ID.
+    const { snapshot } = await idCounterRef.transaction((currentData: { lastId: number } | null) => {
+        if (currentData === null) {
+            return { lastId: 1 };
+        }
+        currentData.lastId++;
+        return currentData;
+    });
+
+    const newId = snapshot.val().lastId;
+    const locationPrefix = location.substring(0, 2).toUpperCase();
+    const talukaPrefix = taluka.substring(0, 2).toUpperCase();
+    
+    return `${locationPrefix}${talukaPrefix}${newId}`;
 }
