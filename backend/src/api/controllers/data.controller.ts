@@ -235,3 +235,23 @@ export const getActiveBundles = async (req: Request, res: Response): Promise<Res
         return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+
+/**
+ * Controller to get a single uploaded file by its ID.
+ */
+export const getFileById = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const { location, fileId } = req.params;
+        const file = await firebaseService.getFileByIdFromDB(location as string, fileId as string);
+
+        if (!file) {
+            return res.status(404).json({ message: `File with ID ${fileId} not found in location ${location}.` });
+        }
+
+        return res.status(200).json(file);
+    } catch (error) {
+        console.error('Error fetching file by ID:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};

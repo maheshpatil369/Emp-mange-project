@@ -6,6 +6,7 @@ import {
   assignBundle,
   completeBundle,
   getActiveBundles,
+  getFileById,
   getFilesByLocation,
   syncRecords,
   uploadFile,
@@ -47,5 +48,9 @@ router.post("/bundles/complete", isAuthenticated, completeBundle);
 
 // GET /api/data/files/:location (Admin only)
 router.get("/files/:location", isAuthenticated, isAdmin, getFilesByLocation);
+
+// GET /api/data/files/:location/:fileId (Admin only) - Gets a single file
+router.get('/files/:location/:fileId', isAuthenticated, isAdmin, getFileById);
+
 
 export default router;

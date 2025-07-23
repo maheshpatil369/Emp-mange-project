@@ -596,3 +596,170 @@ export async function getDashboardSummaryFromDB() {
         activeBundles
     };
 }
+
+
+
+
+/**
+ * NEW: Gathers and computes all data needed for the entire Analytics page.
+ * This is an expensive operation as it processes all data in the database.
+ * @param filters - Optional filters for the bundle summary.
+ * @returns An object containing all aggregated analytics data.
+ */
+export async function getAnalyticsDataFromDB(filters: { location?: string; taluka?: string; }) {
+    const db = admin.database();
+
+    // Fetch all required data sources in parallel
+    const [
+        usersSnapshot,
+        filesSnapshot,
+        processedRecordsSnapshot,
+        userStatesSnapshot
+    ] = await Promise.all([
+        db.ref('users').once('value'),
+        db.ref('files').once('value'),
+        db.ref('processedRecords').once('value'),
+        db.ref('userStates').once('value')
+    ]);
+
+    const usersData = usersSnapshot.val() || {};
+    const filesData = filesSnapshot.val() || {};
+    const processedRecordsData = processedRecordsSnapshot.val() || {};
+    const userStatesData = userStatesSnapshot.val() || {};
+
+    const usersList: User[] = Object.keys(usersData).map(key => ({ id: key, ...usersData[key] }));
+    const userMap = new Map(usersList.map(u => [u.id, u]));
+
+    //  Calculate Top-Level Stats 
+    let totalExcelRecords = 0;
+    const fileStatsMap = new Map();
+
+    for (const location in filesData) {
+        for (const fileId in filesData[location]) {
+            const file = filesData[location][fileId];
+            const recordCount = file.content?.length || 0;
+            totalExcelRecords += recordCount;
+            fileStatsMap.set(file.name, {
+                fileName: file.name,
+                total: recordCount,
+                completed: 0,
+            });
+        }
+    }
+
+    let completedRecords = 0;
+    let pdfRequired = 0;
+    const recordsByLocation: { [location: string]: number } = {};
+    const userRecordCounts: { [userId: string]: number } = {};
+
+    for (const location in processedRecordsData) {
+        recordsByLocation[location] = 0;
+        for (const taluka in processedRecordsData[location]) {
+            for (const bundle in processedRecordsData[location][taluka]) {
+                const recordsInBundle = processedRecordsData[location][taluka][bundle];
+                for (const recordId in recordsInBundle) {
+                    const record = recordsInBundle[recordId];
+                    if (typeof record === 'object' && record !== null) {
+                        completedRecords++;
+                        recordsByLocation[location]++;
+                        
+                        if (record.PDfRequired === 'Yes') {
+                            pdfRequired++;
+                        }
+
+                        // For User Leaderboard
+                        userRecordCounts[record.processedBy] = (userRecordCounts[record.processedBy] || 0) + 1;
+
+                        // For File Status
+                        if (fileStatsMap.has(record.sourceFile)) {
+                            fileStatsMap.get(record.sourceFile).completed++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    const topLevelStats = {
+        totalExcelRecords,
+        completedRecords,
+        pendingRecords: totalExcelRecords - completedRecords,
+        registeredUsers: usersList.length,
+        activeBundles: Object.values(userStatesData).reduce((acc:any, state: any) => acc + Object.keys(state.activeBundles || {}).length, 0),
+        pdfRequired,
+    };
+
+    // Format Analytics Widgets Data 
+
+    // Processing Status by Excel File
+    const processingStatusByFile = Array.from(fileStatsMap.values()).map(file => ({
+        ...file,
+        pending: file.total - file.completed,
+        progress: file.total > 0 ? Math.round((file.completed / file.total) * 100) : 0,
+    }));
+
+    // User Leaderboard
+    const userLeaderboard = Object.entries(userRecordCounts)
+        .map(([userId, count]) => ({
+            rank: 0,
+            userName: userMap.get(userId)?.name || 'Unknown User',
+            recordsProcessed: count,
+        }))
+        .sort((a, b) => b.recordsProcessed - a.recordsProcessed)
+        .map((user, index) => ({ ...user, rank: index + 1 }));
+
+    // Bundle Completion Summary
+    let bundleCompletionSummary = [];
+    for (const userId in userStatesData) {
+        const user = userMap.get(userId);
+        if (user && userStatesData[userId].activeBundles) {
+            for (const taluka in userStatesData[userId].activeBundles) {
+                const activeBundle = userStatesData[userId].activeBundles[taluka];
+                const bundleData = {
+                    userName: user.name,
+                    location: user.location,
+                    taluka: taluka,
+                    bundleNo: activeBundle.bundleNo,
+                    recordsProcessed: activeBundle.count || 0, // Use count from user state
+                    pdfsRequired: 'N/A', // This would require iterating processed records again
+                    status: 'In Progress',
+                };
+                bundleCompletionSummary.push(bundleData);
+            }
+        }
+    }
+
+    // Apply filters if they exist
+    if (filters.location) {
+        bundleCompletionSummary = bundleCompletionSummary.filter(b => b.location === filters.location);
+    }
+    if (filters.taluka) {
+        bundleCompletionSummary = bundleCompletionSummary.filter(b => b.taluka === filters.taluka);
+    }
+
+    return {
+        topLevelStats,
+        recordsByLocation: Object.entries(recordsByLocation).map(([name, value]) => ({ name, value })),
+        processingStatusByFile,
+        userLeaderboard,
+        bundleCompletionSummary,
+    };
+}
+
+
+/**
+ * Fetches a single uploaded file by its ID for a specific location.
+ * @param location - The location slug where the file is stored.
+ * @param fileId - The unique ID of the file to fetch.
+ * @returns The file object or null if not found.
+ */
+export async function getFileByIdFromDB(location: string, fileId: string): Promise<any | null> {
+    const db = admin.database();
+    const fileRef = db.ref(`files/${location}/${fileId}`);
+    const snapshot = await fileRef.once('value');
+
+    if (!snapshot.exists()) {
+        return null;
+    }
+    return snapshot.val();
+}

@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   exportProcessedData,
   forceCompleteBundle,
+  getAnalyticsPageData,
   getBundleCountersStatus,
   getDashboardSummary,
   manualAssignBundle,
@@ -12,6 +13,9 @@ import {
 import { isAuthenticated, isAdmin } from "../middleware/auth.middleware";
 
 const router = Router();
+
+// This single endpoint provides all data for the analytics page
+router.get("/analytics", isAuthenticated, isAdmin, getAnalyticsPageData);
 
 // GET /api/admin/analytics/bundle-counters
 // This route is protected and can only be accessed by an admin.
@@ -56,7 +60,11 @@ router.post(
 );
 
 // GET /api/admin/analytics/dashboard-summary
-router.get('/analytics/dashboard-summary', isAuthenticated, isAdmin, getDashboardSummary);
-
+router.get(
+  "/analytics/dashboard-summary",
+  isAuthenticated,
+  isAdmin,
+  getDashboardSummary
+);
 
 export default router;

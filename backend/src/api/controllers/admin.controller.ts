@@ -188,3 +188,23 @@ export const getDashboardSummary = async (req: Request, res: Response): Promise<
         return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+
+/**
+ * Controller to get all aggregated data for the Analytics page.
+ */
+export const getAnalyticsPageData = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        // Extract optional filters for the bundle summary from query params
+        const filters = {
+            location: req.query.location as string | undefined,
+            taluka: req.query.taluka as string | undefined,
+        };
+        
+        const analyticsData = await firebaseService.getAnalyticsDataFromDB(filters);
+        return res.status(200).json(analyticsData);
+    } catch (error) {
+        console.error('Error fetching analytics page data:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
