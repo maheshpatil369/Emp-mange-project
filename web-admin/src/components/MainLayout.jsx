@@ -11,6 +11,7 @@ function MainLayout() {
     { name: "Dashboard", href: "/", icon: BarChart3 },
     { name: "Users", href: "/users", icon: Users },
     { name: "Data Management", href: "/data-management", icon: Database },
+    { name: "Analytics", href: "/analytics", icon: Database },
   ];
 
   const handleSignOut = async () => {

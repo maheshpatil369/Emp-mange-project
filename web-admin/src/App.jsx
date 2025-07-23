@@ -12,7 +12,7 @@ import {
   LocationFileManagement,
 } from "./components/DataManagementPage";
 // Import your other page components here as well
-// import Analytics from './components/Analytics';
+import Analytics from "./components/Analytics";
 // etc...
 
 function App() {
@@ -39,7 +39,7 @@ function App() {
               <Route path=":location" element={<LocationFileManagement />} />
             </Route>
             {/* Add your other routes here */}
-            {/* <Route path="data-management" element={<DataManagement />} /> */}
+            <Route path="analytics" element={<Analytics />} />
           </Route>
         </Routes>
       </Router>
