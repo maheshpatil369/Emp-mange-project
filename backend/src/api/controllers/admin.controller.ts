@@ -174,3 +174,17 @@ export const resetAllCounters = async (req: Request, res: Response): Promise<Res
         return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+/**
+ * NEW: Controller to get the summary statistics for the dashboard.
+ */
+
+export const getDashboardSummary = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const summary = await firebaseService.getDashboardSummaryFromDB();
+        return res.status(200).json(summary);
+    } catch (error) {
+        console.error('Error fetching dashboard summary:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};

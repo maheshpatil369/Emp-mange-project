@@ -3,6 +3,7 @@ import {
   exportProcessedData,
   forceCompleteBundle,
   getBundleCountersStatus,
+  getDashboardSummary,
   manualAssignBundle,
   resetAllCounters,
   resetAllProcessedData,
@@ -53,5 +54,9 @@ router.post(
   isAdmin,
   resetAllCounters
 );
+
+// GET /api/admin/analytics/dashboard-summary
+router.get('/analytics/dashboard-summary', isAuthenticated, isAdmin, getDashboardSummary);
+
 
 export default router;

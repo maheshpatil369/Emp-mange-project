@@ -13,14 +13,14 @@ export const uploadFile = async (
   res: Response
 ): Promise<Response> => {
   try {
-    // 1. Check if a file was actually uploaded by Multer.
+    //  Check if a file was actually uploaded by Multer.
     if (!req.file) {
       return res
         .status(400)
         .json({ message: "Bad Request: No file uploaded." });
     }
 
-    // 2. Extract location and file metadata.
+    // Extract location and file metadata.
     const location = req.params.location;
     const fileData = {
       name: req.file.originalname,
@@ -30,7 +30,7 @@ export const uploadFile = async (
       content: [] as any[], // Initialize content as an empty array
     };
 
-    // 3. Parse the Excel file from a stream.
+    // Parse the Excel file from a stream.
     const workbook = new ExcelJS.Workbook();
     const stream = Readable.from(req.file.buffer);
     await workbook.xlsx.read(stream); // Use .read() for streams
@@ -62,7 +62,7 @@ export const uploadFile = async (
       }
     });
 
-    // 5. Call the service to save the parsed data to Firebase.
+    // Call the service to save the parsed data to Firebase.
     const fileId = await firebaseService.saveUploadedFileToDB(
       location as string,
       fileData
@@ -79,6 +79,23 @@ export const uploadFile = async (
       .status(500)
       .json({ message: "Internal Server Error: Could not process file." });
   }
+};
+
+
+
+
+/**
+ * Controller to get a list of uploaded file names for a location.
+ */
+export const getFilesByLocation = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const { location } = req.params;
+        const files = await firebaseService.getFilesByLocationFromDB(location as string);
+        return res.status(200).json(files);
+    } catch (error) {
+        console.error('Error fetching files by location:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
 };
 
 

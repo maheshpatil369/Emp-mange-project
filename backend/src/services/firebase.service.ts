@@ -27,33 +27,33 @@ export async function getAllUsersFromDB(): Promise<User[]> {
   return usersArray;
 }
 
-export async function createUserInDB(userData: Omit<User, "id">) {
-  // Create the user in Firebase Authentication
+
+
+export async function createUserInDB(userData: Omit<User, 'id'>) {
   const auth = admin.auth();
   const userRecord = await auth.createUser({
-    email: `${userData.username}@yourapp.com`, // Firebase Auth requires an email
-    password: userData.mobile,
+    email: `${userData.username}@yourapp.com`,
+    password: userData.password, 
     displayName: userData.name,
     disabled: false,
   });
 
-  // 2. Create the user profile in the Realtime Database
   const db = admin.database();
   const userProfileRef = db.ref(`users/${userRecord.uid}`);
 
-  // We only store the profile data, not the auth data like password
   const profileData = {
     name: userData.name,
     username: userData.username,
     mobile: userData.mobile,
     location: userData.location,
     role: userData.role,
+    excelFile: userData.excelFile || null,
   };
 
   await userProfileRef.set(profileData);
-
   return userRecord;
 }
+
 
 
 /**
@@ -84,7 +84,6 @@ export async function saveUploadedFileToDB(
 }
 
 
-
 /**
  * Fetches a single user's profile from the database.
  * @param userId - The UID of the user to fetch.
@@ -101,6 +100,48 @@ export async function getUserFromDB(userId: string): Promise<User | null> {
   return { id: userId, ...snapshot.val() };
 }
 
+
+export async function updateUserInDB(userId: string, updates: Partial<User>) {
+    const db = admin.database();
+    const userProfileRef = db.ref(`users/${userId}`);
+    
+    // Update profile in Realtime Database
+    await userProfileRef.update(updates);
+
+    // Update corresponding data in Firebase Auth
+    await admin.auth().updateUser(userId, {
+        displayName: updates.name,
+    });
+}
+
+
+export async function deleteUserInDB(userId: string) {
+    // 1. Delete from Firebase Authentication
+    await admin.auth().deleteUser(userId);
+
+    // 2. Delete from Realtime Database
+    const db = admin.database();
+    const userProfileRef = db.ref(`users/${userId}`);
+    await userProfileRef.remove();
+}
+
+
+
+export async function getFilesByLocationFromDB(location: string): Promise<{id: string, name: string}[]> {
+    const db = admin.database();
+    const filesRef = db.ref(`files/${location}`);
+    const snapshot = await filesRef.once('value');
+
+    if (!snapshot.exists()) {
+        return [];
+    }
+
+    const filesData = snapshot.val();
+    return Object.keys(filesData).map(key => ({
+        id: key,
+        name: filesData[key].name,
+    }));
+}
 
 
 /**
@@ -492,3 +533,66 @@ export async function resetAllCountersInDB(): Promise<void> {
     await db.ref().update(updates);
 }
 
+
+
+// Gathers all the statistics needed for the admin dashboard.
+
+export async function getDashboardSummaryFromDB() {
+    const db = admin.database();
+
+    // Fetch all data points in parallel for efficiency
+    const [
+        usersSnapshot,
+        filesSnapshot,
+        processedRecordsSnapshot,
+        activeBundlesSnapshot
+    ] = await Promise.all([
+        db.ref('users').once('value'),
+        db.ref('files').once('value'),
+        db.ref('processedRecords').once('value'),
+        db.ref('userStates').once('value')
+    ]);
+
+    // Calculate stats
+    const registeredUsers = usersSnapshot.exists() ? usersSnapshot.numChildren() : 0;
+    
+    let totalExcelRecords = 0;
+    if (filesSnapshot.exists()) {
+        const filesData = filesSnapshot.val();
+        for (const location in filesData) {
+            for (const fileId in filesData[location]) {
+                totalExcelRecords += filesData[location][fileId].content?.length || 0;
+            }
+        }
+    }
+
+    let completedRecords = 0;
+    if (processedRecordsSnapshot.exists()) {
+        const recordsData = processedRecordsSnapshot.val();
+         for (const location in recordsData) {
+            for (const taluka in recordsData[location]) {
+                for (const bundle in recordsData[location][taluka]) {
+                    // Subtract 1 if metadata like 'isForceCompleted' exists
+                    const recordCount = Object.keys(recordsData[location][taluka][bundle]).filter(k => typeof recordsData[location][taluka][bundle][k] === 'object').length;
+                    completedRecords += recordCount;
+                }
+            }
+        }
+    }
+
+    let activeBundles = 0;
+    if (activeBundlesSnapshot.exists()) {
+        const userStates = activeBundlesSnapshot.val();
+        for (const userId in userStates) {
+            activeBundles += Object.keys(userStates[userId].activeBundles || {}).length;
+        }
+    }
+
+    return {
+        totalExcelRecords,
+        completedRecords,
+        pendingRecords: totalExcelRecords - completedRecords,
+        registeredUsers,
+        activeBundles
+    };
+}

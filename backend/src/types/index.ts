@@ -4,9 +4,11 @@ export interface User {
   id: string;
   name: string;
   username: string;
+  password?: string;
   mobile: string;
   location: string;
   role: "Admin" | "User";
+  excelFile?: string;
 }
 
 // Defines the structure of an active bundle in /userStates
@@ -31,7 +33,7 @@ export interface ProcessedRecord {
   processedBy: string;
   processedAt: string;
   sourceFile: string;
-  taluka: string; 
+  taluka: string;
   // The rest of the fields are dynamic, coming from the user's input
   [key: string]: any;
 }
