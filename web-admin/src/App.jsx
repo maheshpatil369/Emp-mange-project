@@ -1,14 +1,41 @@
-
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./services/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Login from "./components/Login";
+import MainLayout from "./components/MainLayout"; // Import the new layout
+import DashboardPage from "./components/Dashboard"; // Import the actual dashboard page
+import UsersManagement from "./components/UsersManagement";
+// Import your other page components here as well
+// import Analytics from './components/Analytics'; 
+// etc...
 
 function App() {
   return (
-   
-     <div className="flex justify-center items-center h-screen bg-gray-100">
-      <h1 className="text-4xl font-bold  text-blue-600">Tailwind is Working!
-      </h1>
+    <AuthProvider>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          
+          {/* Protected Routes */}
+          <Route 
+            path="/" 
+            element={
+              <ProtectedRoute>
+                <MainLayout />
+              </ProtectedRoute>
+            }
+          >
+            {/* These are the child routes that will be rendered in the <Outlet /> */}
+            <Route index element={<DashboardPage />} />
+            <Route path="users" element={<UsersManagement />} />
+            {/* Add your other routes here */}
+            {/* <Route path="data-management" element={<DataManagement />} /> */}
+          </Route>
 
-    </div>
-
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 
