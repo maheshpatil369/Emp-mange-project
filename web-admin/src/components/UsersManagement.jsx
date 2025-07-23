@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 // File: src/components/UsersManagement.jsx
 
 import React, { useState, useEffect } from "react";
@@ -8,12 +9,17 @@ const UsersManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // State for modals
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null); // Will hold the user object to edit
+  const [deletingUser, setDeletingUser] = useState(null); // Will hold the user object to delete
 
   // Function to fetch users
   const fetchUsers = async () => {
     try {
       setLoading(true);
+      setError(""); // Clear previous errors
       const response = await apiClient.get("/users");
       setUsers(response.data);
     } catch (err) {
@@ -51,7 +57,7 @@ const UsersManagement = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-800">User Management</h1>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => setIsCreateModalOpen(true)}
           className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           <PlusCircle className="w-5 h-5 mr-2" />
@@ -104,10 +110,16 @@ const UsersManagement = () => {
                     {user.excelFile || "N/A"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                    <button className="text-indigo-600 hover:text-indigo-900">
+                    <button
+                      onClick={() => setEditingUser(user)}
+                      className="text-indigo-600 hover:text-indigo-900"
+                    >
                       <Edit className="w-5 h-5" />
                     </button>
-                    <button className="text-red-600 hover:text-red-900">
+                    <button
+                      onClick={() => setDeletingUser(user)}
+                      className="text-red-600 hover:text-red-900"
+                    >
                       <Trash2 className="w-5 h-5" />
                     </button>
                   </td>
@@ -118,10 +130,26 @@ const UsersManagement = () => {
         </div>
       </div>
 
-      {isModalOpen && (
+      {isCreateModalOpen && (
         <CreateUserModal
-          closeModal={() => setIsModalOpen(false)}
+          closeModal={() => setIsCreateModalOpen(false)}
           onUserCreated={fetchUsers}
+        />
+      )}
+
+      {editingUser && (
+        <EditUserModal
+          user={editingUser}
+          closeModal={() => setEditingUser(null)}
+          onUserUpdated={fetchUsers}
+        />
+      )}
+
+      {deletingUser && (
+        <DeleteUserModal
+          user={deletingUser}
+          closeModal={() => setDeletingUser(null)}
+          onUserDeleted={fetchUsers}
         />
       )}
     </div>
@@ -144,33 +172,29 @@ const CreateUserModal = ({ closeModal, onUserCreated }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Fetch locations on modal mount
   useEffect(() => {
     const fetchConfig = async () => {
       try {
         const response = await apiClient.get("/data/config");
         setLocations(response.data.locations || []);
       } catch (err) {
-        console.error("Failed to fetch config", err);
         setError("Could not load locations.");
       }
     };
     fetchConfig();
   }, []);
 
-  // Fetch files when location changes
   useEffect(() => {
     if (formData.location) {
       const fetchFiles = async () => {
         try {
-          setFiles([]); // Reset files list
-          setFormData((prev) => ({ ...prev, excelFile: "" })); // Reset selected file
+          setFiles([]);
+          setFormData((prev) => ({ ...prev, excelFile: "" }));
           const response = await apiClient.get(
             `/data/files/${formData.location}`
           );
           setFiles(response.data || []);
         } catch (err) {
-          console.error("Failed to fetch files", err);
           setError(`Could not load files for ${formData.location}.`);
         }
       };
@@ -188,12 +212,11 @@ const CreateUserModal = ({ closeModal, onUserCreated }) => {
     setLoading(true);
     try {
       await apiClient.post("/users", formData);
-      alert("User created successfully!"); // Simple feedback for now
-      onUserCreated(); // Refresh the user list in the parent component
+      alert("User created successfully!");
+      onUserCreated();
       closeModal();
     } catch (err) {
       setError(err.response?.data?.message || "Failed to create user.");
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -283,6 +306,211 @@ const CreateUserModal = ({ closeModal, onUserCreated }) => {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+// --- Edit User Modal Component ---
+const EditUserModal = ({ user, closeModal, onUserUpdated }) => {
+  const [formData, setFormData] = useState({
+    name: user.name || "",
+    mobile: user.mobile || "",
+    location: user.location || "",
+    excelFile: user.excelFile || "",
+  });
+  const [locations, setLocations] = useState([]);
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const configRes = await apiClient.get("/data/config");
+        setLocations(configRes.data.locations || []);
+
+        if (formData.location) {
+          const filesRes = await apiClient.get(
+            `/data/files/${formData.location}`
+          );
+          setFiles(filesRes.data || []);
+        }
+      } catch (err) {
+        setError("Could not load initial data.");
+      }
+    };
+    fetchInitialData();
+  }, [formData.location]);
+
+  useEffect(() => {
+    if (formData.location) {
+      const fetchFiles = async () => {
+        try {
+          const response = await apiClient.get(
+            `/data/files/${formData.location}`
+          );
+          setFiles(response.data || []);
+        } catch (err) {
+          setError(`Could not load files for ${formData.location}.`);
+        }
+      };
+      fetchFiles();
+    }
+  }, [formData.location]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    const newFormData = { ...formData, [name]: value };
+    // If the location is changed, reset the excelFile
+    if (name === "location") {
+      newFormData.excelFile = "";
+    }
+    setFormData(newFormData);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      await apiClient.put(`/users/${user.id}`, formData);
+      alert("User updated successfully!");
+      onUserUpdated();
+      closeModal();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update user.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-2xl">
+        <h2 className="text-2xl font-bold mb-6">Edit User: {user.username}</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input
+              name="name"
+              value={formData.name}
+              placeholder="Full Name"
+              onChange={handleChange}
+              required
+              className="p-2 border rounded"
+            />
+            <input
+              name="mobile"
+              value={formData.mobile}
+              placeholder="Mobile Number"
+              onChange={handleChange}
+              required
+              className="p-2 border rounded"
+            />
+            <select
+              name="location"
+              value={formData.location}
+              onChange={handleChange}
+              required
+              className="p-2 border rounded"
+            >
+              <option value="">Select Location</option>
+              {locations.map((loc) => (
+                <option key={loc.slug} value={loc.slug}>
+                  {loc.name}
+                </option>
+              ))}
+            </select>
+            <select
+              name="excelFile"
+              value={formData.excelFile}
+              onChange={handleChange}
+              disabled={!formData.location}
+              required
+              className="p-2 border rounded"
+            >
+              <option value="">
+                {!formData.location
+                  ? "Select a location first"
+                  : "Assign Excel File"}
+              </option>
+              {files.map((file) => (
+                <option key={file.id} value={file.name}>
+                  {file.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {error && <p className="text-red-500">{error}</p>}
+          <div className="flex justify-end space-x-4 mt-6">
+            <button
+              type="button"
+              onClick={closeModal}
+              className="px-4 py-2 bg-gray-200 rounded"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 bg-indigo-600 text-white rounded disabled:bg-indigo-300"
+            >
+              {loading ? <Loader2 className="animate-spin" /> : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// --- Delete User Modal Component ---
+const DeleteUserModal = ({ user, closeModal, onUserDeleted }) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleDelete = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await apiClient.delete(`/users/${user.id}`);
+      alert("User deleted successfully!");
+      onUserDeleted();
+      closeModal();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to delete user.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+        <h2 className="text-2xl font-bold mb-4">Delete User</h2>
+        <p className="text-gray-600 mb-6">
+          Are you sure you want to permanently delete the user{" "}
+          <span className="font-bold">
+            {user.name} ({user.username})
+          </span>
+          ? This action cannot be undone.
+        </p>
+        {error && <p className="text-red-500 mb-4">{error}</p>}
+        <div className="flex justify-end space-x-4">
+          <button
+            onClick={closeModal}
+            className="px-4 py-2 bg-gray-200 rounded"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={loading}
+            className="px-4 py-2 bg-red-600 text-white rounded disabled:bg-red-300"
+          >
+            {loading ? <Loader2 className="animate-spin" /> : "Delete User"}
+          </button>
+        </div>
       </div>
     </div>
   );

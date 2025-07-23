@@ -6,8 +6,9 @@ import Login from "./components/Login";
 import MainLayout from "./components/MainLayout"; // Import the new layout
 import DashboardPage from "./components/Dashboard"; // Import the actual dashboard page
 import UsersManagement from "./components/UsersManagement";
+import DataManagementPage from "./components/DataManagementPage";
 // Import your other page components here as well
-// import Analytics from './components/Analytics'; 
+// import Analytics from './components/Analytics';
 // etc...
 
 function App() {
@@ -16,10 +17,10 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
-          
+
           {/* Protected Routes */}
-          <Route 
-            path="/" 
+          <Route
+            path="/"
             element={
               <ProtectedRoute>
                 <MainLayout />
@@ -29,10 +30,10 @@ function App() {
             {/* These are the child routes that will be rendered in the <Outlet /> */}
             <Route index element={<DashboardPage />} />
             <Route path="users" element={<UsersManagement />} />
+            <Route path="/data-management" element={<DataManagementPage />} />
             {/* Add your other routes here */}
             {/* <Route path="data-management" element={<DataManagement />} /> */}
           </Route>
-
         </Routes>
       </Router>
     </AuthProvider>
