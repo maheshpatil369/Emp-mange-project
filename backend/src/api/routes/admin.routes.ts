@@ -6,9 +6,11 @@ import {
   getBundleCountersStatus,
   getDashboardSummary,
   manualAssignBundle,
+  markIncompleteAsComplete,
   resetAllCounters,
   resetAllProcessedData,
   resetUserProgress,
+  searchRecordById,
 } from "../controllers/admin.controller";
 import { isAuthenticated, isAdmin } from "../middleware/auth.middleware";
 
@@ -65,6 +67,17 @@ router.get(
   isAuthenticated,
   isAdmin,
   getDashboardSummary
+);
+
+// The query will now be like: /api/admin/records/search?searchFromId=12345
+router.get('/records/search', isAuthenticated, isAdmin, searchRecordById);
+
+// Mark Incomplete as Complete Route 
+router.post(
+  "/mark-incomplete-complete",
+  isAuthenticated,
+  isAdmin,
+  markIncompleteAsComplete
 );
 
 export default router;

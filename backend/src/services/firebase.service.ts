@@ -127,7 +127,7 @@ export async function deleteUserInDB(userId: string) {
 
 
 
-export async function getFilesByLocationFromDB(location: string): Promise<{id: string, name: string}[]> {
+export async function getFilesByLocationFromDB(location: string): Promise<{id: string, name: string, uploadDate:string,size:number}[]> {
     const db = admin.database();
     const filesRef = db.ref(`files/${location}`);
     const snapshot = await filesRef.once('value');
@@ -140,6 +140,8 @@ export async function getFilesByLocationFromDB(location: string): Promise<{id: s
     return Object.keys(filesData).map(key => ({
         id: key,
         name: filesData[key].name,
+        uploadDate: filesData[key].uploadDate,
+        size: filesData[key].size,
     }));
 }
 
@@ -879,4 +881,88 @@ export async function getNextUniqueIdFromDB(location: string, taluka: string): P
     const talukaPrefix = taluka.substring(0, 2).toUpperCase();
     
     return `${locationPrefix}${talukaPrefix}${newId}`;
+}
+
+
+
+/**
+ * Searches for a single PROCESSED record by the value in its "Search from" field.
+ * This is for the admin's search tool.
+ * @param searchFromId - The value from the "Search from" column to find.
+ * @returns The found record object or null.
+ */
+export async function searchProcessedRecordBySearchFromId(searchFromId: string): Promise<any | null> {
+    const db = admin.database();
+    const recordsRef = db.ref('processedRecords');
+    const snapshot = await recordsRef.once('value');
+
+    if (!snapshot.exists()) {
+        return null;
+    }
+
+    const allLocations = snapshot.val();
+    
+    // Define possible variations of the "Search from" column header.
+    const searchKeys = ['Search from', 'Search From', 'search from'];
+
+    // This is an expensive search that iterates through all processed data.
+    for (const location in allLocations) {
+        for (const taluka in allLocations[location]) {
+            for (const bundle in allLocations[location][taluka]) {
+                const recordsInBundle = allLocations[location][taluka][bundle];
+                for (const recordId in recordsInBundle) {
+                    const record = recordsInBundle[recordId];
+                    if (typeof record === 'object' && record !== null) {
+                        // Check against all possible key variations.
+                        for (const key of searchKeys) {
+                            if (record[key] && String(record[key]).trim() === String(searchFromId).trim()) {
+                                return record; // Return the first match found.
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    return null; // Return null if no match is found after checking everything.
+}
+
+
+
+/**
+ * Clears a user's active bundle state for a specific taluka.
+ * This is used for "Mark Incomplete Bundle as Complete".
+ * @param userId - The UID of the user.
+ * @param taluka - The taluka of the bundle to clear.
+ */
+export async function clearUserActiveBundleInDB(userId: string, taluka: string): Promise<void> {
+    const db = admin.database();
+    const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
+    
+    const snapshot = await userStateRef.once('value');
+    if (!snapshot.exists()) {
+        throw new Error(`User ${userId} has no active bundle for taluka ${taluka}.`);
+    }
+    
+    await userStateRef.remove();
+}
+
+
+/**
+ * Deletes an uploaded file record from the database.
+ * Note: This does not delete from Firebase Storage if you were storing the raw files there.
+ * @param location - The location slug.
+ * @param fileId - The ID of the file to delete.
+ */
+export async function deleteFileFromDB(location: string, fileId: string): Promise<void> {
+    const db = admin.database();
+    const fileRef = db.ref(`files/${location}/${fileId}`);
+    
+    const snapshot = await fileRef.once('value');
+    if (!snapshot.exists()) {
+        throw new Error(`File with ID ${fileId} not found in location ${location}.`);
+    }
+
+    await fileRef.remove();
 }

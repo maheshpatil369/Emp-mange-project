@@ -401,3 +401,21 @@ export const getNextUniqueId = async (req: Request, res: Response): Promise<Resp
         return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+
+/**
+ * Controller to delete an uploaded file record.
+ */
+export const deleteFile = async (req: Request, res: Response): Promise<Response> => {
+    try {
+        const { location, fileId } = req.params;
+        await firebaseService.deleteFileFromDB(location as string, fileId as string);
+        return res.status(200).json({ message: 'File deleted successfully.' });
+    } catch (error: any) {
+        if (error.message.includes('not found')) {
+            return res.status(404).json({ message: error.message });
+        }
+        console.error('Error deleting file:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};

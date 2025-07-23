@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Database,
   UploadCloud,
-  File,
   Loader2,
   AlertTriangle,
   ArrowLeft,
@@ -17,21 +16,22 @@ import {
   ShieldCheck,
   BookUser,
   DatabaseZap,
+  Search,
+  PackageCheck,
 } from "lucide-react";
 import apiClient from "../lib/axios";
+import { Outlet } from "react-router-dom";
 
-// --- Main Parent Component ---
-const DataManagementPage = () => {
+export const DataManagementPage = () => {
   return (
-    <Routes>
-      <Route index element={<DataManagementHub />} />
-      <Route path=":location" element={<LocationFileManagement />} />
-    </Routes>
+    <div>
+      <Outlet />
+    </div>
   );
 };
 
 // --- Component for the main /data-management page ---
-const DataManagementHub = () => {
+export const DataManagementHub = () => {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
@@ -61,48 +61,18 @@ const DataManagementHub = () => {
     <div className="space-y-8">
       <h1 className="text-3xl font-bold text-gray-800">Data Management</h1>
 
-      {/* Locations Section */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <div className="flex items-center mb-4">
-          <Database className="w-6 h-6 mr-3 text-blue-600" />
-          <h2 className="text-xl font-semibold text-gray-700">Locations</h2>
-        </div>
-        <p className="text-sm text-gray-500 mb-4">
-          Manage and upload Excel data for each location.
-        </p>
-        {loading ? (
-          <Loader2 className="animate-spin" />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {locations.map((loc) => (
-              <div
-                key={loc.slug}
-                className="p-4 border rounded-lg flex items-center justify-between"
-              >
-                <span className="font-medium">{loc.name}</span>
-                <Link
-                  to={`/data-management/${loc.slug}`}
-                  className="flex items-center text-sm text-blue-600 hover:underline"
-                >
-                  Manage Data <ChevronRight className="w-4 h-4 ml-1" />
-                </Link>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Other Admin Tool Components */}
+      <LocationsSection locations={locations} loading={loading} />
+      <SearchRecord />
       <BundleCountersStatus locations={locations} />
       <DownloadRecords locations={locations} />
-      <AdminTools locations={locations} users={users} config={config} />
+      <AdminTools users={users} config={config} />
       <DangerZone />
     </div>
   );
 };
 
 // --- Component for the /data-management/:location page ---
-const LocationFileManagement = () => {
+export const LocationFileManagement = () => {
   const { location } = useParams();
   const navigate = useNavigate();
   const [files, setFiles] = useState([]);
@@ -143,6 +113,23 @@ const LocationFileManagement = () => {
     } finally {
       setUploading(false);
       setSelectedFile(null);
+    }
+  };
+
+  const handleDelete = async (fileId) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this file? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+    try {
+      await apiClient.delete(`/data/files/${location}/${fileId}`);
+      alert("File deleted successfully!");
+      fetchFiles(); // Refresh the list after deletion
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to delete file.");
     }
   };
 
@@ -223,10 +210,13 @@ const LocationFileManagement = () => {
                     {(file.size / 1024).toFixed(2)} KB
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(file.uploadDate).toLocaleDateString()}
+                    {file.uploadDate}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-red-600 hover:text-red-900">
+                    <button
+                      onClick={() => handleDelete(file.id)}
+                      className="text-red-600 hover:text-red-900"
+                    >
                       Delete
                     </button>
                   </td>
@@ -241,6 +231,103 @@ const LocationFileManagement = () => {
 };
 
 // --- Child Components for the DataManagementHub ---
+
+const LocationsSection = ({ locations, loading }) => (
+  <div className="bg-white p-6 rounded-lg shadow-md">
+    <div className="flex items-center mb-4">
+      <Database className="w-6 h-6 mr-3 text-blue-600" />
+      <h2 className="text-xl font-semibold text-gray-700">Locations</h2>
+    </div>
+    <p className="text-sm text-gray-500 mb-4">
+      Manage and upload Excel data for each location.
+    </p>
+    {loading ? (
+      <Loader2 className="animate-spin" />
+    ) : (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {locations.map((loc) => (
+          <div
+            key={loc.slug}
+            className="p-4 border rounded-lg flex items-center justify-between"
+          >
+            <span className="font-medium">{loc.name}</span>
+            <Link
+              to={`/data-management/${loc.slug}`}
+              className="flex items-center text-sm text-blue-600 hover:underline"
+            >
+              Manage Data <ChevronRight className="w-4 h-4 ml-1" />
+            </Link>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
+const SearchRecord = () => {
+  const [searchId, setSearchId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [foundRecord, setFoundRecord] = useState(null);
+  const [error, setError] = useState("");
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setFoundRecord(null);
+    try {
+      const response = await apiClient.get(
+        `/admin/records/search?searchFromId=${searchId}`
+      );
+      setFoundRecord(response.data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Search failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-md">
+      <h2 className="text-xl font-semibold text-gray-700">Search Record</h2>
+      <p className="text-sm text-gray-500 mt-1">
+        Search for a record by its ID from the "Search from" column.
+      </p>
+      <form
+        onSubmit={handleSearch}
+        className="mt-4 flex items-center space-x-2"
+      >
+        <input
+          value={searchId}
+          onChange={(e) => setSearchId(e.target.value)}
+          placeholder="Enter ID from 'Search from' column"
+          className="flex-1 p-2 border rounded-md"
+        />
+        <button
+          type="submit"
+          disabled={loading || !searchId}
+          className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-green-300"
+        >
+          {loading ? (
+            <Loader2 className="animate-spin" />
+          ) : (
+            <Search className="w-5 h-5 mr-2" />
+          )}
+          Search
+        </button>
+      </form>
+      {error && <p className="text-red-500 mt-2 text-sm">{error}</p>}
+      {foundRecord && (
+        <div className="mt-4 p-4 bg-gray-50 rounded-md border">
+          <h3 className="font-bold">Record Found</h3>
+          <pre className="text-xs mt-2 bg-gray-100 p-2 rounded overflow-x-auto">
+            {JSON.stringify(foundRecord, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const BundleCountersStatus = ({ locations }) => {
   const [counters, setCounters] = useState(null);
@@ -420,8 +507,15 @@ const DownloadRecords = ({ locations }) => {
 
 const AdminTools = ({ users, config }) => {
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md space-y-6">
+    <div className="bg-white p-6 rounded-lg shadow-md space-y-8">
       <h2 className="text-xl font-semibold text-gray-700">Management Tools</h2>
+      <AdminTool
+        title="Mark Incomplete Bundle as Complete"
+        description="Manually complete a user's current bundle for a specific Taluka, allowing them to assign a new one. This does not delete any processed data."
+      >
+        <MarkIncompleteForm users={users} config={config} />
+      </AdminTool>
+      <hr />
       <AdminTool
         title="Force Complete a Bundle"
         description="Manually mark any bundle as complete."
@@ -454,6 +548,81 @@ const AdminTool = ({ title, description, children }) => (
     <div className="mt-4">{children}</div>
   </div>
 );
+
+const MarkIncompleteForm = ({ users, config }) => {
+  const [formData, setFormData] = useState({ userId: "", taluka: "" });
+  const [loading, setLoading] = useState(false);
+  const [talukas, setTalukas] = useState([]);
+
+  const selectedUser = users.find((u) => u.id === formData.userId);
+
+  useEffect(() => {
+    if (selectedUser && config) {
+      const locConfig = config.talukas.find(
+        (t) => t.locationSlug === selectedUser.location
+      );
+      setTalukas(locConfig ? locConfig.talukas : []);
+    } else {
+      setTalukas([]);
+    }
+    setFormData((prev) => ({ ...prev, taluka: "" }));
+  }, [formData.userId, config, users]);
+
+  const handleChange = (e) =>
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (
+      !window.confirm(
+        "Are you sure? This will clear the user's active bundle, allowing them to assign a new one."
+      )
+    )
+      return;
+    setLoading(true);
+    try {
+      await apiClient.post("/admin/mark-incomplete-complete", formData);
+      alert("Active bundle cleared successfully!");
+      e.target.reset();
+      setFormData({ userId: "", taluka: "" });
+    } catch (err) {
+      alert(err.response?.data?.message || "Operation failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end"
+    >
+      <SelectInput
+        name="userId"
+        value={formData.userId}
+        onChange={handleChange}
+        options={users.map((u) => ({ value: u.id, label: u.name }))}
+        placeholder="Select User"
+      />
+      <SelectInput
+        name="taluka"
+        value={formData.taluka}
+        onChange={handleChange}
+        options={talukas.map((t) => ({ value: t, label: t }))}
+        placeholder="Select Taluka"
+        disabled={!formData.userId}
+      />
+      <button
+        type="submit"
+        disabled={loading || !formData.taluka}
+        className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-gray-600 rounded-lg hover:bg-gray-700 disabled:bg-gray-300"
+      >
+        <PackageCheck className="w-5 h-5 mr-2" />
+        {loading ? <Loader2 className="animate-spin" /> : "Mark as Complete"}
+      </button>
+    </form>
+  );
+};
 
 const ForceCompleteForm = ({ users, config }) => {
   const [formData, setFormData] = useState({
@@ -817,5 +986,3 @@ const DangerZone = () => {
     </div>
   );
 };
-
-export default DataManagementPage;

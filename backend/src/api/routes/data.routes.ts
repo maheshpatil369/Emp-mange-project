@@ -5,6 +5,7 @@ import multer from "multer";
 import {
   assignBundle,
   completeBundle,
+  deleteFile,
   getActiveBundles,
   getAssignedFile,
   getConfig,
@@ -68,5 +69,8 @@ router.get('/records/search', isAuthenticated, searchRecord);
 
 // GET /api/data/records/next-unique-id (Authenticated User)
 router.get('/records/next-unique-id', isAuthenticated, getNextUniqueId);
+
+// DELETE /api/data/files/:location/:fileId (Admin only)
+router.delete('/files/:location/:fileId', isAuthenticated, isAdmin, deleteFile);
 
 export default router;
