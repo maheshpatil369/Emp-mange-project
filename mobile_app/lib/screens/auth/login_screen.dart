@@ -366,6 +366,8 @@
 //     );
 //   }
 // }
+
+
 // lib/screens/auth/login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -379,7 +381,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController(text: 'testuser');
+  // username controller ko email controller bana diya
+  final _emailController = TextEditingController(text: 'testuser@example.com');
   final _passwordController = TextEditingController(text: '123456');
   final _formKey = GlobalKey<FormState>();
 
@@ -390,15 +393,16 @@ class _LoginScreenState extends State<LoginScreen> {
     _formKey.currentState!.save();
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    // login function ko ab email bhejenge
     bool success = await authProvider.login(
-      _usernameController.text.trim(),
+      _emailController.text.trim(),
       _passwordController.text.trim(),
     );
 
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Login Failed. Please check your username and password.'),
+          content: Text('Login Failed. Please check your email and password.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -421,16 +425,18 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 40),
+                // Username field ko Email field bana diya
                 TextFormField(
-                  controller: _usernameController,
+                  controller: _emailController,
                   decoration: const InputDecoration(
-                    labelText: 'Username',
+                    labelText: 'Email', // Label badal diya
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
+                    prefixIcon: Icon(Icons.email), // Icon badal diya
                   ),
+                  keyboardType: TextInputType.emailAddress, // Keyboard type badal diya
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your username';
+                    if (value == null || value.isEmpty || !value.contains('@')) {
+                      return 'Please enter a valid email'; // Validation badal diya
                     }
                     return null;
                   },

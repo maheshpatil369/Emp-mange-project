@@ -30,6 +30,8 @@
 //   // Yahan aap baaki API calls (get bundles, sync data etc.) add kar sakte hain
 // }
 
+
+
 // lib/api/api_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -38,11 +40,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiService {
   final String _baseUrl = 'http://127.0.0.1:8000/api'; // Windows App ke liye
 
-  Future<String> login(String username, String password) async {
+  // Yahan badlaav kiya gaya hai
+  Future<String> login(String email, String password) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/auth/login'),
       headers: {'Content-Type': 'application/json; charset=UTF-8'},
-      body: json.encode({'username': username, 'password': password}),
+      // 'username' ki jagah ab 'email' bhej rahe hain
+      body: json.encode({'email': email, 'password': password}),
     );
 
     if (response.statusCode == 200) {
@@ -68,8 +72,7 @@ class ApiService {
       'Authorization': 'Bearer $token',
     };
   }
-  
-  // Baki ke functions waise hi rahenge
+
   Future<List<dynamic>> downloadAssignedFile() async {
     final headers = await _getHeaders();
     final response = await http.get(
