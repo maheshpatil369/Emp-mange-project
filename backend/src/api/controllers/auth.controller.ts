@@ -1,4 +1,7 @@
 import { Request, Response } from 'express';
+import { getAuth } from 'firebase-admin/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth as clientAuth } from '../../config/firebase.config';
 
 /**
  * Verifies a user's password for re-authentication purposes by attempting
@@ -51,6 +54,37 @@ export const reauthenticate = async (req: Request, res: Response): Promise<Respo
 
     } catch (error: any) {
         console.error('Error during re-authentication check:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+
+export const login = async (req: Request, res: Response): Promise<Response> => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ message: 'Bad Request: "email" and "password" are required.' });
+    }
+
+    try {
+        const userCredential = await signInWithEmailAndPassword(clientAuth, email, password);
+        const user = userCredential.user;
+        const idToken = await user.getIdToken();
+
+        return res.status(200).json({
+            message: 'Login successful.',
+            token: idToken,
+            user: {
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName,
+            },
+        });
+    } catch (error: any) {
+        console.error('Error during login:', error);
+        if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+            return res.status(401).json({ message: 'Unauthorized: Invalid credentials.' });
+        }
         return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
