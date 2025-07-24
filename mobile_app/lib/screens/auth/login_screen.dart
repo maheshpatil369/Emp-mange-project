@@ -366,96 +366,106 @@
 //     );
 //   }
 // }
-
-
+// lib/screens/auth/login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-// import '../../api/api_service.dart'; // ✅ Asli API service ko abhi ke liye comment kar dein
 import '../../providers/auth_provider.dart';
-import '../main_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({Key? key}) : super(key: key);
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  _LoginScreenState createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  // final _apiService = ApiService(); // ✅ Iski bhi abhi zaroorat nahi
-  bool _isLoading = false;
+  final _usernameController = TextEditingController(text: 'testuser');
+  final _passwordController = TextEditingController(text: '123456');
+  final _formKey = GlobalKey<FormState>();
 
-  // ✅ Yeh naya DUMMY login function hai
-  Future<void> _dummyLogin() async {
-    setState(() {
-      _isLoading = true;
-    });
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    _formKey.currentState!.save();
 
-    // Network call jaisa feel dene ke liye 1 second ka delay
-    await Future.delayed(const Duration(seconds: 1));
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    bool success = await authProvider.login(
+      _usernameController.text.trim(),
+      _passwordController.text.trim(),
+    );
 
-    try {
-      // Ek "dummy" token se login karwayein
-      await Provider.of<AuthProvider>(context, listen: false)
-          .login("FAKE_AUTH_TOKEN_FOR_TESTING");
-
-      // Login successful hone par aage badhein
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (ctx) => const MainNavigationScreen()),
-        );
-      }
-    } catch (error) {
-      // Error hone par (waise is dummy logic mein error aayega nahi)
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.toString()),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Login Failed. Please check your username and password.'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Aapka UI code waisa ka waisa hi rahega
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email (dummy)'),
-              keyboardType: TextInputType.emailAddress,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Text(
+                  'User Login',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 40),
+                TextFormField(
+                  controller: _usernameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Username',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your username';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder(), prefixIcon: Icon(Icons.lock)),
+                  obscureText: true,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your password';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 30),
+                Consumer<AuthProvider>(
+                  builder: (ctx, auth, _) => auth.isLoading
+                      ? const CircularProgressIndicator()
+                      : SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _submit,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            child: const Text('Login', style: TextStyle(fontSize: 18)),
+                          ),
+                        ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Password (dummy)'),
-              obscureText: true,
-            ),
-            const SizedBox(height: 20),
-            if (_isLoading)
-              const CircularProgressIndicator()
-            else
-              ElevatedButton(
-                // ✅ Yahan ab _dummyLogin function call hoga
-                onPressed: _dummyLogin,
-                child: const Text('Login'),
-              ),
-          ],
+          ),
         ),
       ),
     );

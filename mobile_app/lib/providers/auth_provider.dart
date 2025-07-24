@@ -49,35 +49,54 @@
 // }
 
 
+// lib/providers/auth_provider.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api/api_service.dart';
 
 class AuthProvider with ChangeNotifier {
+  final ApiService _apiService = ApiService();
   String? _token;
+  bool _isLoading = false;
 
-  bool get isLoggedIn => _token != null;
-  String? get token => _token;
+  bool get isAuthenticated => _token != null;
+  bool get isLoading => _isLoading;
 
-  Future<void> login(String token) async {
-    _token = token;
+  AuthProvider() {
+    _tryAutoLogin();
+  }
+
+  Future<void> _tryAutoLogin() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('authToken', token);
+    if (prefs.containsKey('token')) {
+      _token = prefs.getString('token');
+      notifyListeners();
+    }
+  }
+
+  Future<bool> login(String username, String password) async {
+    _isLoading = true;
     notifyListeners();
+    try {
+      final token = await _apiService.login(username, password);
+      _token = token;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('token', token);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint(e.toString());
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> logout() async {
     _token = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('authToken');
-    notifyListeners();
-  }
-
-  Future<void> tryAutoLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!prefs.containsKey('authToken')) {
-      return;
-    }
-    _token = prefs.getString('authToken');
+    await prefs.remove('token');
     notifyListeners();
   }
 }

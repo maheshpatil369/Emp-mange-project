@@ -30,45 +30,74 @@
 //   // Yahan aap baaki API calls (get bundles, sync data etc.) add kar sakte hain
 // }
 
+// lib/api/api_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // Apna backend URL yahan daalein
-  final String _baseUrl = 'http://YOUR_BACKEND_IP_OR_DOMAIN/api';
+  final String _baseUrl = 'http://127.0.0.1:8000/api'; // Windows App ke liye
 
-  Future<String> login(String email, String password) async {
-    final url = Uri.parse('$_baseUrl/auth/login'); // Maan lijiye aapka login endpoint yeh hai
+  Future<String> login(String username, String password) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/auth/login'),
+      headers: {'Content-Type': 'application/json; charset=UTF-8'},
+      body: json.encode({'username': username, 'password': password}),
+    );
 
-    try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'email': email,
-          'password': password,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        // Maan lijiye backend 'token' key mein token bhejta hai
-        if (responseData.containsKey('token')) {
-          return responseData['token'];
-        } else {
-          throw Exception('Token not found in response');
-        }
+    if (response.statusCode == 200) {
+      final responseBody = json.decode(response.body);
+      if (responseBody['success'] == true && responseBody['token'] != null) {
+        return responseBody['token'];
       } else {
-        // Server se aaye error message ko dikhayein
-        final errorData = json.decode(response.body);
-        throw Exception(errorData['message'] ?? 'Failed to login');
+        throw Exception(responseBody['message'] ?? 'Invalid response from server.');
       }
-    } catch (error) {
-      // Network ya dusre errors ke liye
-      throw Exception('An error occurred: ${error.toString()}');
+    } else {
+      throw Exception('Failed to login. Please check server logs.');
     }
   }
 
-  // Aapke data download/sync ke functions yahaan aayenge
-  // Un sabhi functions mein authentication token bhejna zaroori hoga
+  Future<Map<String, String>> _getHeaders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    if (token == null) {
+      throw Exception('User not logged in. Token not found.');
+    }
+    return {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Authorization': 'Bearer $token',
+    };
+  }
+  
+  // Baki ke functions waise hi rahenge
+  Future<List<dynamic>> downloadAssignedFile() async {
+    final headers = await _getHeaders();
+    final response = await http.get(
+      Uri.parse('$_baseUrl/data/assigned-file'),
+      headers: headers,
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['records'] ?? data['content'] ?? [];
+    } else {
+      throw Exception('Failed to download data: ${response.body}');
+    }
+  }
+
+  Future<bool> syncProcessedRecords(Map<String, dynamic> syncData) async {
+    final headers = await _getHeaders();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/data/records/sync'),
+      headers: headers,
+      body: json.encode(syncData),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+       final responseBody = json.decode(response.body);
+       return responseBody['success'] ?? false;
+    } else {
+      throw Exception('Failed to sync data: ${response.body}');
+    }
+  }
 }
