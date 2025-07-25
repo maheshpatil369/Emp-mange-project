@@ -17,18 +17,18 @@ dependencies:
   sqflite: ^2.3.2
   path_provider: ^2.1.2
   path: ^1.9.0
-  connectivity_plus: ^6.1.4
+  connectivity_plus: ^5.0.2
 
-  # Firebase Packages (Inke versions update kiye hain)
-  firebase_core: ^3.15.2 # Latest compatible stable version (check pub.dev for current latest)
-  firebase_auth: ^5.7.0 # Latest compatible stable version (check pub.dev for current latest)
+  # Firebase Packages (Latest compatible stable versions)
+  firebase_core: ^2.27.0
+  firebase_auth: ^4.17.0
 
   cupertino_icons: ^1.0.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ^2.0.0
 
 flutter:
   uses-material-design: true

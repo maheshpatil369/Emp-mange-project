@@ -10,7 +10,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // username controller ko email controller bana diya
   final _emailController = TextEditingController(text: 'testuser@example.com');
   final _passwordController = TextEditingController(text: '123456');
   final _formKey = GlobalKey<FormState>();
@@ -23,32 +22,27 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     try {
-      // login function ko ab email bhejenge
-      await authProvider.login( // `bool success =` hata diya
+      await authProvider.signInWithEmailAndPassword(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
-
-      // Agar login successful hota hai toh authProvider already isAuthenticated ko true kar dega
-      // aur main.dart ka Consumer auto redirect kar dega MainNavigationScreen par.
-      // Yahan explicit Navigator.of(context).pushReplacement ki zaroorat nahi hai.
-
+      // Login successful hone par, main.dart ka Consumer automatic MainNavigationScreen par redirect karega.
     } catch (error) {
-      // Error hone par (jaise 'user not exist')
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.toString().replaceAll('Exception: ', '')), // Exception text remove kar ke show karein
+            content: Text(error.toString().replaceAll('Exception: ', '')),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
-    // Loading state ko authProvider handle kar raha hai, to yahan setState ki zaroorat nahi
   }
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -58,31 +52,35 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                Text(
+                // Original simple UI format
+                const Text(
                   'User Login',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 40),
-                // Username field ko Email field bana diya
+                const SizedBox(height: 32),
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(
-                    labelText: 'Email', // Label badal diya
+                    labelText: 'Email',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email), // Icon badal diya
+                    prefixIcon: Icon(Icons.email),
                   ),
-                  keyboardType: TextInputType.emailAddress, // Keyboard type badal diya
+                  keyboardType: TextInputType.emailAddress,
                   validator: (value) {
                     if (value == null || value.isEmpty || !value.contains('@')) {
-                      return 'Please enter a valid email'; // Validation badal diya
+                      return 'Please enter a valid email';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder(), prefixIcon: Icon(Icons.lock)),
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock),
+                  ),
                   obscureText: true,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -92,21 +90,19 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 const SizedBox(height: 30),
-                Consumer<AuthProvider>(
-                  builder: (ctx, auth, _) => auth.isLoading
-                      ? const CircularProgressIndicator()
-                      : SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _submit,
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            child: const Text('Login', style: TextStyle(fontSize: 18)),
+                authProvider.isLoading
+                    ? const CircularProgressIndicator()
+                    : SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: authProvider.isLoading ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
+                          child: const Text('Login', style: TextStyle(fontSize: 18)),
                         ),
-                ),
+                      ),
               ],
             ),
           ),

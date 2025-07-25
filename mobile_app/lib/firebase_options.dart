@@ -40,55 +40,58 @@ class DefaultFirebaseOptions {
     }
   }
 
+  // Aapki provide ki gayi keys ka upyog kiya gaya hai
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'your-web-api-key',
-    appId: 'your-web-app-id',
-    messagingSenderId: 'your-messaging-sender-id',
-    projectId: 'your-project-id',
-    authDomain: 'your-project-id.firebaseapp.com',
-    storageBucket: 'your-project-id.appspot.com',
-    databaseURL: 'https://your-project-id-default-rtdb.firebaseio.com',
+    apiKey: 'AIzaSyDI5UR31WmPpc_GVY2M6dju4JkehZI4y4o',
+    appId: '1:353380325588:web:15205d5382c647c0358341',
+    messagingSenderId: '353380325588',
+    projectId: 'employe-2dbf9',
+    authDomain: 'employe-2dbf9.firebaseapp.com',
+    storageBucket: 'employe-2dbf9.appspot.com',
+    databaseURL: 'https://employe-2dbf9-default-rtdb.firebaseio.com',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'your-android-api-key',
-    appId: 'your-android-app-id',
-    messagingSenderId: 'your-messaging-sender-id',
-    projectId: 'your-project-id',
-    authDomain: 'your-project-id.firebaseapp.com',
-    storageBucket: 'your-project-id.appspot.com',
-    databaseURL: 'https://your-project-id-default-rtdb.firebaseio.com',
+    apiKey: 'AIzaSyDI5UR31WmPpc_GVY2M6dju4JkehZI4y4o',
+    appId: '1:353380325588:android:15205d5382c647c0358341',
+    messagingSenderId: '353380325588',
+    projectId: 'employe-2dbf9',
+    authDomain: 'employe-2dbf9.firebaseapp.com',
+    storageBucket: 'employe-2dbf9.appspot.com',
+    databaseURL: 'https://employe-2dbf9-default-rtdb.firebaseio.com',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'your-ios-api-key',
-    appId: 'your-ios-app-id',
-    messagingSenderId: 'your-messaging-sender-id',
-    projectId: 'your-project-id',
-    authDomain: 'your-project-id.firebaseapp.com',
-    storageBucket: 'your-project-id.appspot.com',
-    databaseURL: 'https://your-project-id-default-rtdb.firebaseio.com',
+    apiKey: 'AIzaSyDI5UR31WmPpc_GVY2M6dju4JkehZI4y4o',
+    appId: '1:353380325588:ios:15205d5382c647c0358341',
+    messagingSenderId: '353380325588',
+    projectId: 'employe-2dbf9',
+    authDomain: 'employe-2dbf9.firebaseapp.com',
+    storageBucket: 'employe-2dbf9.appspot.com',
+    databaseURL: 'https://employe-2dbf9-default-rtdb.firebaseio.com',
     iosBundleId: 'com.example.mobile_app',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'your-macos-api-key',
-    appId: 'your-macos-app-id',
-    messagingSenderId: 'your-messaging-sender-id',
-    projectId: 'your-project-id',
-    authDomain: 'your-project-id.firebaseapp.com',
-    storageBucket: 'your-project-id.appspot.com',
-    databaseURL: 'https://your-project-id-default-rtdb.firebaseio.com',
+    apiKey: 'AIzaSyDI5UR31WmPpc_GVY2M6dju4JkehZI4y4o',
+    appId: '1:353380325588:macos:15205d5382c647c0358341',
+    messagingSenderId: '353380325588',
+    projectId: 'employe-2dbf9',
+    authDomain: 'employe-2dbf9.firebaseapp.com',
+    storageBucket: 'employe-2dbf9.appspot.com',
+    databaseURL: 'https://employe-2dbf9-default-rtdb.firebaseio.com',
     iosBundleId: 'com.example.mobile_app',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'your-windows-api-key',
-    appId: 'your-windows-app-id',
-    messagingSenderId: 'your-messaging-sender-id',
-    projectId: 'your-project-id',
-    authDomain: 'your-project-id.firebaseapp.com',
-    storageBucket: 'your-project-id.appspot.com',
-    databaseURL: 'https://your-project-id-default-rtdb.firebaseio.com',
+    apiKey: 'AIzaSyDI5UR31WmPpc_GVY2M6dju4JkehZI4y4o',
+    // DHYAN DEIN: Yeh App ID abhi web wali hai.
+    // Windows ke liye Firebase Console mein ek alag Windows app add karke uski App ID yahan daalein.
+    appId: '1:353380325588:web:15205d5382c647c0358341',
+    messagingSenderId: '353380325588',
+    projectId: 'employe-2dbf9',
+    authDomain: 'employe-2dbf9.firebaseapp.com',
+    storageBucket: 'employe-2dbf9.appspot.com',
+    databaseURL: 'https://employe-2dbf9-default-rtdb.firebaseio.com',
   );
 }

@@ -1,107 +1,54 @@
-// // lib/widgets/common/custom_drawer.dart
-// import 'package:flutter/material.dart';
-
-// class CustomDrawer extends StatelessWidget {
-//   const CustomDrawer({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Drawer(
-//       child: ListView(
-//         padding: EdgeInsets.zero,
-//         children: [
-//           const UserAccountsDrawerHeader(
-//             accountName: Text("Mahesh Patil"),
-//             accountEmail: Text("fakemahesh@example.com"),
-//             currentAccountPicture: CircleAvatar(
-//               backgroundColor: Colors.white,
-//               child: Text(
-//                 "M",
-//                 style: TextStyle(fontSize: 40.0),
-//               ),
-//             ),
-//           ),
-//           ListTile(
-//             leading: const Icon(Icons.dashboard),
-//             title: const Text('Dashboard'),
-//             onTap: () {
-//               Navigator.pop(context);
-//               // TODO: Add navigation logic
-//             },
-//           ),
-//           ListTile(
-//             leading: const Icon(Icons.data_usage),
-//             title: const Text('Data Management'),
-//             onTap: () {
-//               Navigator.pop(context);
-//               // TODO: Add navigation logic
-//             },
-//           ),
-//           const Divider(),
-//           ListTile(
-//             leading: const Icon(Icons.logout),
-//             title: const Text('Log Out'),
-//             onTap: () {
-//               Navigator.pop(context);
-//               // TODO: Add logout logic
-//             },
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-
-// lib/widgets/common/custom_drawer.dart
+// mobile_app/lib/widgets/comman/custom_drawer.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:mobile_app/providers/auth_provider.dart';
+import 'package:mobile_app/screens/profile/profile_screen.dart'; // ProfileScreen import kiya
 
 class CustomDrawer extends StatelessWidget {
   const CustomDrawer({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false); // listen: false kyuki yahan sirf action chahiye
+
     return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          const UserAccountsDrawerHeader(
-            accountName: Text("Mahesh Patil"),
-            accountEmail: Text("fakemahesh@example.com"),
-            currentAccountPicture: CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Text(
-                "M",
-                style: TextStyle(fontSize: 40.0),
-              ),
-            ),
-            // ✅ Set the green color extracted from the image
-       decoration: BoxDecoration(
-    color: Color(0xFF22B14C), // ← your custom green
-  ),
+      child: Column(
+        children: <Widget>[
+          AppBar(
+            title: const Text('Menu'),
+            automaticallyImplyLeading: false, // Back button nahi dikhana
           ),
           ListTile(
-            leading: const Icon(Icons.dashboard),
-            title: const Text('Dashboard'),
+            leading: const Icon(Icons.home),
+            title: const Text('Home'),
             onTap: () {
-              Navigator.pop(context);
-              // TODO: Add navigation logic
+              Navigator.of(context).pushReplacementNamed('/home');
             },
           ),
+          // Yahan aapke doosre ListTiles honge (jaise Data Screen, Home Screen)
+          // ...
           ListTile(
-            leading: const Icon(Icons.data_usage),
-            title: const Text('Data Management'),
+            leading: const Icon(Icons.person),
+            title: const Text('Profile'),
             onTap: () {
-              Navigator.pop(context);
-              // TODO: Add navigation logic
+              Navigator.of(context).pop(); // Drawer close karein
+              Navigator.of(context).pushNamed('/profile'); // Profile Screen par navigate karein
             },
           ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),
-            title: const Text('Log Out'),
-            onTap: () {
-              Navigator.pop(context);
-              // TODO: Add logout logic
+            title: const Text('Logout'),
+            onTap: () async {
+              Navigator.of(context).pop(); // Drawer close karein
+              try {
+                await authProvider.signOut();
+                // Logout ke baad main.dart ka Consumer automatic LoginScreen par redirect karega
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(e.toString())),
+                );
+              }
             },
           ),
         ],

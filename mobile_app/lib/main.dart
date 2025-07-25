@@ -1,69 +1,50 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:firebase_core/firebase_core.dart'; // Nayi import line
-import 'firebase_options.dart'; // Nayi import line
-import 'providers/auth_provider.dart';
-import 'providers/data_provider.dart';
-import 'helpers/database_helper.dart';
-import 'screens/auth/login_screen.dart';
-import 'screens/main_navigation_screen.dart';
+import 'package:firebase_core/firebase_core.dart'; // Firebase core import
+import 'package:provider/provider.dart'; // Provider package import
+import 'firebase_options.dart'; // Firebase options import
+import 'package:mobile_app/providers/auth_provider.dart'; // AuthProvider import
+import 'package:mobile_app/screens/auth/login_screen.dart'; // LoginScreen import
+import 'package:mobile_app/screens/main_navigation_screen.dart'; // MainNavigationScreen import
+import 'package:mobile_app/screens/profile/profile_screen.dart'; // ProfileScreen import
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  // Firebase ko yahan initialize karein (Naya code)
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized(); // Ensure Flutter widgets are initialized
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (ctx) => AuthProvider()),
-        ChangeNotifierProxyProvider<AuthProvider, DataProvider>(
-          create: (ctx) => DataProvider(),
-          update: (ctx, auth, previousDataProvider) {
-            if (!auth.isAuthenticated) {
-              previousDataProvider?.clearAllLocalData();
-            }
-            return previousDataProvider!;
-          },
-        ),
-      ],
-      child: const MyApp(),
-    ),
-  );
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Data Management App',
-      theme: ThemeData(
-        primarySwatch: Colors.indigo,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-      ),
-      home: Consumer<AuthProvider>(
-        builder: (ctx, auth, _) {
-          if (auth.isAuthenticated) {
-            return const MainNavigationScreen();
-          } else {
-            return const LoginScreen();
-          }
+    return ChangeNotifierProvider( // AuthProvider ko provide karein
+      create: (context) => AuthProvider(),
+      child: MaterialApp(
+        title: 'Employee Management',
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+        ),
+        home: Consumer<AuthProvider>( // AuthProvider ke state ko listen karein
+          builder: (context, authProvider, child) {
+            // Agar user logged in hai, toh MainNavigationScreen dikhayein
+            // Firebase.auth().currentUser automatic login state maintain karta hai
+            if (authProvider.user != null) {
+              return const MainNavigationScreen(); // Dashboard dikhane ke liye
+            } else {
+              // Agar user logged out hai, toh LoginScreen dikhayein
+              return const LoginScreen();
+            }
+          },
+        ),
+        routes: {
+          '/login': (context) => const LoginScreen(),
+          '/profile': (context) => const ProfileScreen(), // Profile route add kiya
+          '/home': (context) => const MainNavigationScreen(), // Home route
         },
       ),
-      routes: {
-        '/home': (ctx) => const MainNavigationScreen(),
-      },
     );
-  }
-}
-
-extension DataProviderExtension on DataProvider {
-  Future<void> clearAllLocalData() async {
-    await DatabaseHelper.instance.clearRecords();
-    await fetchLocalData();
- 
   }
 }
