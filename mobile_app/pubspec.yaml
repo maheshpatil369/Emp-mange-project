@@ -19,6 +19,10 @@ dependencies:
   path: ^1.9.0
   connectivity_plus: ^5.0.2
 
+  # Firebase Packages (Inke versions update kiye hain)
+  firebase_core: ^2.27.0 # Latest compatible stable version (check pub.dev for current latest)
+  firebase_auth: ^4.17.0 # Latest compatible stable version (check pub.dev for current latest)
+
   cupertino_icons: ^1.0.2
 
 dev_dependencies:

@@ -1,14 +1,19 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart'; // Nayi import line
+import 'firebase_options.dart'; // Nayi import line
 import 'providers/auth_provider.dart';
 import 'providers/data_provider.dart';
-import 'helpers/database_helper.dart'; // Import zaroori hai
+import 'helpers/database_helper.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Firebase ko yahan initialize karein (Naya code)
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(
     MultiProvider(
       providers: [
@@ -55,10 +60,10 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Ye extension method DataProvider ko local data clear karne me madad karega
 extension DataProviderExtension on DataProvider {
   Future<void> clearAllLocalData() async {
     await DatabaseHelper.instance.clearRecords();
     await fetchLocalData();
+ 
   }
 }

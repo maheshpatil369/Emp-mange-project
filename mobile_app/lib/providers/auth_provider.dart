@@ -1,62 +1,12 @@
-// // providers/data_provider.dart
-// // Download kiye hue data ko temporarily hold karne ke liye
-// import 'package:flutter/foundation.dart';
-// import '../models/member_model.dart';
-
-// class DataProvider with ChangeNotifier {
-//   List<Member> _members = [];
-//   bool _isLoading = false;
-
-//   List<Member> get members => _members;
-//   bool get isLoading => _isLoading;
-
-//   // Dummy data download karne ka function
-//   Future<void> fetchData() async {
-//     _isLoading = true;
-//     notifyListeners();
-    
-//     // Yahan aap `api_service.getBundleData()` call karenge
-//     await Future.delayed(const Duration(seconds: 2)); // API call ka simulation
-//     _members = List.generate(
-//       15,
-//       (index) => Member(id: 'ID-${100 + index}', name: 'Member ${100 + index}'),
-//     );
-    
-//     _isLoading = false;
-//     notifyListeners();
-//   }
-
-//   // Data update karne ka function
-//   void updateMemberStatus(String id, String newStatus) {
-//     final index = _members.indexWhere((member) => member.id == id);
-//     if (index != -1) {
-//       _members[index].status = newStatus;
-//       notifyListeners();
-//     }
-//   }
-  
-//   // Data sync karne ka function
-//   Future<void> syncData() async {
-//       _isLoading = true;
-//       notifyListeners();
-      
-//       // Yahan aap `api_service.syncData(updatedMembers)` call karenge
-//       await Future.delayed(const Duration(seconds: 2));
-      
-//       _isLoading = false;
-//       notifyListeners();
-//   }
-// }
-
-
-// lib/providers/auth_provider.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../api/api_service.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Nayi import line
+// import '../api/api_service.dart'; // Yeh line remove kar dein
 
 class AuthProvider with ChangeNotifier {
-  final ApiService _apiService = ApiService();
-  String? _token;
+  // ApiService ki ab yahan zaroorat nahi
+  // final ApiService _apiService = ApiService(); // Yeh line remove kar dein
+  String? _token; // Firebase se milne wala ID token store karenge
   bool _isLoading = false;
 
   bool get isAuthenticated => _token != null;
@@ -68,25 +18,43 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> _tryAutoLogin() async {
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.containsKey('token')) {
-      _token = prefs.getString('token');
+    // SharedPreferences mein Firebase ID token store karenge
+    if (prefs.containsKey('firebase_token')) { // Key name change kiya
+      _token = prefs.getString('firebase_token');
       notifyListeners();
     }
   }
 
-  Future<bool> login(String username, String password) async {
+  // Login function ab Firebase Authentication use karegi
+  Future<bool> login(String email, String password) async {
     _isLoading = true;
     notifyListeners();
     try {
-      final token = await _apiService.login(username, password);
-      _token = token;
+      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      // Login successful hone par Firebase ID token lein
+      _token = await credential.user?.getIdToken();
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('token', token);
+      await prefs.setString('firebase_token', _token!); // Token save karein (Key name change kiya)
       notifyListeners();
       return true;
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Login Failed.';
+      if (e.code == 'user-not-found') {
+        errorMessage = 'User not found. Please check your email.'; // User not exist
+      } else if (e.code == 'wrong-password') {
+        errorMessage = 'Wrong password provided for that user.';
+      } else if (e.code == 'invalid-email') {
+        errorMessage = 'The email address is not valid.';
+      }
+      debugPrint('Firebase Auth Error: ${e.code} - ${e.message}');
+      // Error message user ko show karein
+      throw Exception(errorMessage); // Exception throw karein takki LoginScreen handle kar sake
     } catch (e) {
-      debugPrint(e.toString());
-      return false;
+      debugPrint('General Login Error: ${e.toString()}');
+      throw Exception('An unexpected error occurred during login.');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -94,9 +62,10 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await FirebaseAuth.instance.signOut(); // Firebase se sign out karein
     _token = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
+    await prefs.remove('firebase_token'); // Token remove karein (Key name change kiya)
     notifyListeners();
   }
 }
