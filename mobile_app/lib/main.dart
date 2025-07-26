@@ -20,17 +20,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider( // AuthProvider ko provide karein
+    return ChangeNotifierProvider( 
       create: (context) => AuthProvider(),
       child: MaterialApp(
         title: 'Employee Management',
         theme: ThemeData(
           primarySwatch: Colors.blue,
         ),
+
+        debugShowCheckedModeBanner: false,
         home: Consumer<AuthProvider>( // AuthProvider ke state ko listen karein
           builder: (context, authProvider, child) {
-            // Agar user logged in hai, toh MainNavigationScreen dikhayein
-            // Firebase.auth().currentUser automatic login state maintain karta hai
+
             if (authProvider.user != null) {
               return const MainNavigationScreen(); // Dashboard dikhane ke liye
             } else {
