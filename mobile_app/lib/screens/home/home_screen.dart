@@ -3,118 +3,159 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/data_provider.dart';
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String? _selectedDistrict;
+  String? _selectedTaluka;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<DataProvider>(context, listen: false).loadConfig();
+    });
+  }
+
+  void _assignBundle() async {
+    if (_selectedTaluka == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a Taluka to assign.')),
+      );
+      return;
+    }
+
+    final dataProvider = Provider.of<DataProvider>(context, listen: false);
+    try {
+      await dataProvider.assignWorkBundle(_selectedTaluka!);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Work bundle assigned successfully!')),
+      );
+      setState(() {
+        _selectedDistrict = null;
+        _selectedTaluka = null;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(dataProvider.errorMessage ?? 'Failed to assign bundle.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard'),
+        title: const Text('Home Dashboard'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Data Sync',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.cloud_download),
-              label: const Text('Download Data from Server'),
-              onPressed: () {
-                Provider.of<DataProvider>(context, listen: false)
-                    .downloadDataFromServer();
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.cloud_upload),
-              label: const Text('Sync Data to Server'),
-              onPressed: () {
-                Provider.of<DataProvider>(context, listen: false)
-                    .syncDataToServer();
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-            const SizedBox(height: 30),
-            const Divider(),
-            const SizedBox(height: 10),
-            Consumer<DataProvider>(
-              builder: (ctx, dataProvider, _) {
-                if (dataProvider.isLoading) {
-                  return Center(
-                    child: Column(
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 10),
-                        Text(dataProvider.message),
-                      ],
-                    ),
-                  );
-                }
+      body: Consumer<DataProvider>(
+        builder: (context, dataProvider, child) {
+          if (dataProvider.isLoadingConfig) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-                return Column(
+          if (dataProvider.errorMessage != null && !dataProvider.isLoadingConfig && dataProvider.districts.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      dataProvider.message,
+                      'Error: ${dataProvider.errorMessage}',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16, color: Colors.blueGrey),
+                      style: const TextStyle(color: Colors.red),
                     ),
                     const SizedBox(height: 20),
-                    _buildStatCard(
-                        'Total Records on Device',
-                        dataProvider.totalRecords.toString(),
-                        Icons.list_alt,
-                        Colors.blue),
-                    const SizedBox(height: 12),
-                    _buildStatCard(
-                        'Records to Sync',
-                        dataProvider.editedRecordsCount.toString(),
-                        Icons.sync_problem,
-                        Colors.orange),
+                    ElevatedButton(
+                      onPressed: () {
+                        dataProvider.loadConfig();
+                      },
+                      child: const Text('Retry'),
+                    ),
                   ],
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            Icon(icon, size: 40, color: color),
-            const SizedBox(width: 20),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 16, color: Colors.grey),
                 ),
-                Text(
-                  value,
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+            );
+          }
+          
+          List<String> availableTalukas = dataProvider.talukas;
+
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Assign New Work Bundle',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+
+                DropdownButtonFormField<String>(
+                  value: _selectedDistrict,
+                  hint: const Text('Select District'),
+                  items: dataProvider.districts.map((district) {
+                    return DropdownMenuItem(
+                      value: district,
+                      child: Text(district),
+                    );
+                  }).toList(),
+                  onChanged: (newValue) {
+                    setState(() {
+                      _selectedDistrict = newValue;
+                      _selectedTaluka = null;
+                    });
+                  },
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'District',
+                  ),
+                ),
+                const SizedBox(height: 15),
+
+                DropdownButtonFormField<String>(
+                  value: _selectedTaluka,
+                  hint: const Text('Select Taluka'),
+                  items: availableTalukas.map((taluka) {
+                    return DropdownMenuItem(
+                      value: taluka,
+                      child: Text(taluka),
+                    );
+                  }).toList(),
+                  onChanged: (newValue) {
+                    setState(() {
+                      _selectedTaluka = newValue;
+                    });
+                  },
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Taluka',
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                ElevatedButton(
+                  onPressed: dataProvider.isAssigningBundle ? null : _assignBundle,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                  ),
+                  child: dataProvider.isAssigningBundle
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          'Assign Bundle',
+                          style: TextStyle(fontSize: 18),
+                        ),
                 ),
               ],
-            )
-          ],
-        ),
+            ),
+          );
+        },
       ),
     );
   }

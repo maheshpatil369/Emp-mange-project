@@ -10,20 +10,31 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Final Packages
+  # Core Flutter packages
+  cupertino_icons: ^1.0.2
+  
+  # State Management
   provider: ^6.1.2
-  shared_preferences: ^2.2.2
+
+  # HTTP Requests
   http: ^1.2.1
-  sqflite: ^2.3.2
+
+  # Local Storage & Database
+  shared_preferences: ^2.2.3 # Updated to latest specified version
+  sqflite: ^2.3.3+1 # Updated to latest specified version
   path_provider: ^2.1.2
-  path: ^1.9.0
+  path: ^1.9.0 # Consolidated and ensured presence
+
+  # SQLite FFI for Web/Desktop compatibility
+  sqflite_common_ffi_web: ^0.4.2
+  sqflite_common_ffi: ^2.3.3+1
+
+  # Network Connectivity Check
   connectivity_plus: ^5.0.2
 
-  # Firebase Packages (Latest compatible stable versions)
+  # Firebase Packages
   firebase_core: ^2.27.0
   firebase_auth: ^4.17.0
-
-  cupertino_icons: ^1.0.2
 
 dev_dependencies:
   flutter_test:

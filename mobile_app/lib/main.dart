@@ -1,17 +1,29 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart'; // Firebase core import
-import 'package:provider/provider.dart'; // Provider package import
-import 'firebase_options.dart'; // Firebase options import
-import 'package:mobile_app/providers/auth_provider.dart'; // AuthProvider import
-import 'package:mobile_app/screens/auth/login_screen.dart'; // LoginScreen import
-import 'package:mobile_app/screens/main_navigation_screen.dart'; // MainNavigationScreen import
-import 'package:mobile_app/screens/profile/profile_screen.dart'; // ProfileScreen import
+import 'package:provider/provider.dart';
+import 'package:mobile_app/providers/auth_provider.dart';
+import 'package:mobile_app/providers/data_provider.dart';
+import 'package:mobile_app/screens/auth/login_screen.dart';
+import 'package:mobile_app/screens/main_navigation_screen.dart';
+import 'package:mobile_app/screens/profile/profile_screen.dart';
+import 'package:mobile_app/screens/data_management/data_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // Ensure Flutter widgets are initialized
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+// Conditional import for sqflite_common_ffi_web
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart'; // ADD THIS IMPORT
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // ADD THIS IMPORT (for desktop ffi)
+
+void main() {
+  // FIX: Initialize sqflite_common_ffi_web for web platform
+  if (kIsWeb) {
+    databaseFactory = databaseFactoryFfiWeb;
+  } else {
+    // Optionally initialize ffi for desktop if you plan to build for desktop
+    // This is good practice if you intend to support Windows/Linux/macOS later.
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
   runApp(const MyApp());
 }
 
@@ -20,30 +32,31 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider( 
-      create: (context) => AuthProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => DataProvider()),
+      ],
       child: MaterialApp(
-        title: 'Employee Management',
+        title: 'Emp Management App',
         theme: ThemeData(
           primarySwatch: Colors.blue,
+          visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-
-        debugShowCheckedModeBanner: false,
-        home: Consumer<AuthProvider>( // AuthProvider ke state ko listen karein
+        home: Consumer<AuthProvider>(
           builder: (context, authProvider, child) {
-
-            if (authProvider.user != null) {
-              return const MainNavigationScreen(); // Dashboard dikhane ke liye
+            if (authProvider.isAuthenticated) {
+              return const MainNavigationScreen();
             } else {
-              // Agar user logged out hai, toh LoginScreen dikhayein
               return const LoginScreen();
             }
           },
         ),
         routes: {
           '/login': (context) => const LoginScreen(),
-          '/profile': (context) => const ProfileScreen(), // Profile route add kiya
-          '/home': (context) => const MainNavigationScreen(), // Home route
+          '/home': (context) => const MainNavigationScreen(),
+          '/profile': (context) => const ProfileScreen(),
+          '/data_management': (context) => const DataScreen(),
         },
       ),
     );

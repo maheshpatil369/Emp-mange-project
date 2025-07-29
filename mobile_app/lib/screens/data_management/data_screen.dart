@@ -2,87 +2,123 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/data_provider.dart';
+import '../../models/member_model.dart';
 
 class DataScreen extends StatefulWidget {
-  const DataScreen({Key? key}) : super(key: key);
+  const DataScreen({super.key});
 
   @override
-  _DataScreenState createState() => _DataScreenState();
+  State<DataScreen> createState() => _DataScreenState();
 }
 
 class _DataScreenState extends State<DataScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Member> _filteredRecords = [];
+
   @override
   void initState() {
     super.initState();
-    // Screen khulte hi local data refresh karein
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<DataProvider>(context, listen: false).fetchLocalData();
     });
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    final dataProvider = Provider.of<DataProvider>(context, listen: false);
+    final query = _searchController.text.toLowerCase();
+
+    setState(() {
+      _filteredRecords = dataProvider.records.where((member) {
+        return member.id.toLowerCase().contains(query) ||
+               member.name.toLowerCase().contains(query) ||
+               member.taluka.toLowerCase().contains(query);
+      }).toList();
+    });
+  }
+
+  void _refreshData() {
+    Provider.of<DataProvider>(context, listen: false).fetchLocalData();
   }
 
   @override
   Widget build(BuildContext context) {
-    // DataProvider se data sunein
-    final dataProvider = Provider.of<DataProvider>(context);
-    final records = dataProvider.records;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Data Management'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              // Manually refresh karne ke liye
-              dataProvider.fetchLocalData();
-            },
-          )
+            onPressed: _refreshData,
+          ),
         ],
       ),
-      body: dataProvider.isLoading && records.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : records.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No data found on device.\nPlease go to Dashboard to download data.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+      body: Consumer<DataProvider>(
+        builder: (context, dataProvider, child) {
+          final displayRecords = _searchController.text.isEmpty
+              ? dataProvider.records
+              : _filteredRecords;
+
+          if (dataProvider.isLoadingRecords && displayRecords.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (dataProvider.errorMessage != null) {
+            return Center(
+              child: Text('Error: ${dataProvider.errorMessage}'),
+            );
+          }
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    labelText: 'Search by ID or Name',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.search),
                   ),
-                )
-              : ListView.builder(
-                  itemCount: records.length,
-                  itemBuilder: (ctx, index) {
-                    final record = records[index];
-                    final isEdited = record['status'] == 'edited';
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor:
-                              isEdited ? Colors.orange : Colors.indigo,
-                          child: Text(
-                            (index + 1).toString(),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        title: Text(record['farmer_name'] ?? 'No Name'),
-                        subtitle: Text('ID: ${record['intimation_no']}'),
-                        trailing: Icon(
-                          isEdited ? Icons.sync_problem : Icons.check_circle,
-                          color: isEdited ? Colors.orange : Colors.green,
-                        ),
-                        onTap: () {
-                          // TODO: Yahan par record ko edit karne ke liye
-                          // ek nayi screen par bhejne ka code aayega.
-                          // Example: Navigator.of(context).push(MaterialPageRoute(...))
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Edit functionality to be added.'))
+                ),
+              ),
+              Expanded(
+                child: displayRecords.isEmpty
+                    ? const Center(child: Text('No records found locally.'))
+                    : ListView.builder(
+                        itemCount: displayRecords.length,
+                        itemBuilder: (context, index) {
+                          final member = displayRecords[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            child: ListTile(
+                              title: Text('ID: ${member.id}'),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Name: ${member.name}'),
+                                  Text('Taluka: ${member.taluka}'),
+                                ],
+                              ),
+                              onTap: () {
+                                // Handle tap on a record if needed
+                              },
+                            ),
                           );
                         },
                       ),
-                    );
-                  },
-                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

@@ -1,83 +1,95 @@
+// lib/providers/auth_provider.dart
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Yeh import zaroori hai
+import 'package:shared_preferences/shared_preferences.dart';
+import '../api/api_service.dart';
+import '../models/user_model.dart'; // User model ko import karein
 
-class AuthProvider extends ChangeNotifier {
-  User? _user; // User object ko store karne ke liye
-  bool _isLoading = false; // Isko wapas add kiya hai
+class AuthProvider with ChangeNotifier {
+  final ApiService _apiService = ApiService();
+  
+  User? _user;
+  bool _isLoading = false;
+  String? _errorMessage;
 
-  // Getter to access the current user
   User? get user => _user;
-
-  // isLoading getter ko wapas add kiya hai
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
 
-  // Constructor to initialize user state on app start
+  bool get isAuthenticated => _user != null; 
+
   AuthProvider() {
-    // Firebase Auth state changes ko listen karein
-    FirebaseAuth.instance.authStateChanges().listen((user) {
-      _user = user;
-      // Agar user login/logout hota hai, toh loading state clear karein
-      _isLoading = false; // Ensure loading is false when state settles
-      notifyListeners(); // UI ko update karne ke liye
-      if (user != null) {
-        print('Auth State Changed: User is logged in: ${user.email}');
+    print('AuthProvider initialized. Checking login status...'); // Debugging print
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      print('Checking token: $token'); // Debugging print
+
+      if (token != null && token.isNotEmpty) {
+        // In a real app, you'd validate this token with your backend
+        // and fetch actual user details. For now, assume valid.
+        _user = User(email: 'user@example.com', name: 'Logged In User'); 
+        print('User found from token: ${_user?.email}'); // Debugging print
       } else {
-        print('Auth State Changed: User is logged out.');
+        _user = null;
+        print('No token found, user is logged out.'); // Debugging print
       }
-    });
+    } catch (e) {
+      _errorMessage = 'Failed to check login status: ${e.toString()}';
+      _user = null;
+      print('Error checking login status: $_errorMessage'); // Debugging print
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+      print('Login status check complete. isAuthenticated: $isAuthenticated'); // Debugging print
+    }
   }
 
   Future<void> signInWithEmailAndPassword(String email, String password) async {
-    _isLoading = true; // Login process shuru hone par isLoading ko true karein
-    notifyListeners(); // UI ko update karein (e.g., CircularProgressIndicator dikhane ke liye)
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    print('Attempting login for: $email'); // Debugging print
+
     try {
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      _user = userCredential.user; // Login ke baad _user ko update karein
-      // authStateChanges() listener ab _user aur notifyListeners() ko handle karega
-      print('User logged in: ${_user?.email}');
-    } on FirebaseAuthException catch (e) {
-      String errorMessage;
-      if (e.code == 'user-not-found') {
-        errorMessage = 'No user found for that email.';
-      } else if (e.code == 'wrong-password') {
-        errorMessage = 'Wrong password provided for that user.';
-      } else if (e.code == 'invalid-email') {
-        errorMessage = 'The email address is not valid.';
-      } else {
-        errorMessage = e.message ?? 'An unknown error occurred.';
-      }
-      print('Login Error: $errorMessage');
-      throw Exception(errorMessage); // Error ko aage pass karein
+      await _apiService.login(email, password); 
+      _user = User(email: email, name: email.split('@')[0]);
+      _errorMessage = null;
+      print('Login successful for: $email'); // Debugging print
     } catch (e) {
-      print('Unexpected Login Error: $e');
-      throw Exception('An unexpected error occurred during login.');
+      _errorMessage = 'Login failed: ${e.toString()}';
+      _user = null;
+      print('Login failed: $_errorMessage'); // Debugging print
     } finally {
-      // Login process khatam hone par isLoading ko false karein
-      // Chahe success ho ya fail, loading state ko hatana hai.
-      // Note: authStateChanges listener bhi _isLoading = false; call karega, lekin yahan bhi rakhna better hai
-      // agar listener ka update delay ho.
       _isLoading = false;
       notifyListeners();
+      print('Login attempt finished. isAuthenticated: $isAuthenticated'); // Debugging print
     }
   }
 
   Future<void> signOut() async {
-    _isLoading = true; // Logout process shuru hone par isLoading ko true karein
-    notifyListeners(); // UI ko update karein
+    _isLoading = true;
+    notifyListeners();
+    print('Attempting logout...'); // Debugging print
     try {
-      await FirebaseAuth.instance.signOut();
-      // _user ko null set karne ki zaroorat nahi, authStateChanges() listener handle karega
-      print('User logged out successfully.');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('token');
+      _user = null;
+      _errorMessage = null;
+      print('Logout successful.'); // Debugging print
     } catch (e) {
-      print('Logout Error: $e');
-      throw Exception('Failed to log out: ${e.toString()}');
+      _errorMessage = 'Logout failed: ${e.toString()}';
+      print('Error during logout: $_errorMessage'); // Debugging print
     } finally {
-      // Logout process khatam hone par isLoading ko false karein
       _isLoading = false;
       notifyListeners();
+      print('Logout attempt finished. isAuthenticated: $isAuthenticated'); // Debugging print
     }
   }
 }
