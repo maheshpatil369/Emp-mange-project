@@ -83,6 +83,7 @@ class DatabaseHelper {
 
   // Database instance ko provide karega
   Future<Database> get database async {
+    print("///////////////////////////ABCD");
     if (_database != null) return _database!;
     _database = await _initDatabase();
     return _database!;
@@ -90,7 +91,9 @@ class DatabaseHelper {
 
   // Database ko initialize karega aur table banayega
   Future<Database> _initDatabase() async {
+    print("///////////////////////////EFGH");
     String path = join(await getDatabasesPath(), 'emp_management.db');
+    print("///////////////////////////zxcrr");
     return await openDatabase(
       path,
       version: 1, // Database version, schema changes par increment karein
@@ -128,7 +131,9 @@ class DatabaseHelper {
 
   // Saare records local database se fetch karne ke liye (for DataScreen)
   Future<List<Member>> getRecords() async {
+    print("///////////////////////////");  
     final db = await database;
+    print("///////////////////////////");
     final List<Map<String, dynamic>> maps = await db.query('members');
 
     // Query results (maps) ko List<Member> objects mein convert karein

@@ -27,7 +27,9 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      print("09876554312");
       final prefs = await SharedPreferences.getInstance();
+      print("09876554312 BCED");
       final token = prefs.getString('token');
       print('Checking token: $token'); // Debugging print
 

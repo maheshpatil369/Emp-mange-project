@@ -12,18 +12,18 @@ dependencies:
 
   # Core Flutter packages
   cupertino_icons: ^1.0.2
-  
+
   # State Management
-  provider: ^6.1.2
+  provider: ^6.1.5
 
   # HTTP Requests
   http: ^1.2.1
 
   # Local Storage & Database
-  shared_preferences: ^2.2.3 # Updated to latest specified version
-  sqflite: ^2.3.3+1 # Updated to latest specified version
+  shared_preferences: ^2.2.3
+  sqflite: ^2.3.3+1
   path_provider: ^2.1.2
-  path: ^1.9.0 # Consolidated and ensured presence
+  path: ^1.9.0
 
   # SQLite FFI for Web/Desktop compatibility
   sqflite_common_ffi_web: ^0.4.2
