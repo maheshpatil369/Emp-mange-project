@@ -6,7 +6,7 @@ import '../models/user_model.dart'; // User model ko import karein
 
 class AuthProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
-  
+
   User? _user;
   bool _isLoading = false;
   String? _errorMessage;
@@ -15,10 +15,11 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  bool get isAuthenticated => _user != null; 
+  bool get isAuthenticated => _user != null;
 
   AuthProvider() {
-    print('AuthProvider initialized. Checking login status...'); // Debugging print
+    print(
+        'AuthProvider initialized. Checking login status...'); // Debugging print
     _checkLoginStatus();
   }
 
@@ -36,7 +37,7 @@ class AuthProvider with ChangeNotifier {
       if (token != null && token.isNotEmpty) {
         // In a real app, you'd validate this token with your backend
         // and fetch actual user details. For now, assume valid.
-        _user = User(email: 'user@example.com', name: 'Logged In User'); 
+        _user = User(email: 'user@example.com', name: 'Logged In User');
         print('User found from token: ${_user?.email}'); // Debugging print
       } else {
         _user = null;
@@ -49,18 +50,34 @@ class AuthProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
-      print('Login status check complete. isAuthenticated: $isAuthenticated'); // Debugging print
+      print(
+          'Login status check complete. isAuthenticated: $isAuthenticated'); // Debugging print
     }
   }
 
   Future<void> signInWithEmailAndPassword(String email, String password) async {
     _isLoading = true;
     _errorMessage = null;
+    _user = null;
     notifyListeners();
     print('Attempting login for: $email'); // Debugging print
 
     try {
-      await _apiService.login(email, password); 
+      final token = await _apiService.login(email, password);
+
+      // Verify token is not empty
+      if (token == null || token.isEmpty) {
+        _errorMessage = 'Invalid login response';
+        _user = null;
+        print('Login failed: Invalid token'); // Debugging print
+        return;
+      }
+
+      // Save token to SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('token', token);
+
+      // Set user details
       _user = User(email: email, name: email.split('@')[0]);
       _errorMessage = null;
       print('Login successful for: $email'); // Debugging print
@@ -71,7 +88,8 @@ class AuthProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
-      print('Login attempt finished. isAuthenticated: $isAuthenticated'); // Debugging print
+      print(
+          'Login attempt finished. isAuthenticated: $isAuthenticated'); // Debugging print
     }
   }
 
@@ -91,7 +109,8 @@ class AuthProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
-      print('Logout attempt finished. isAuthenticated: $isAuthenticated'); // Debugging print
+      print(
+          'Logout attempt finished. isAuthenticated: $isAuthenticated'); // Debugging print
     }
   }
 }

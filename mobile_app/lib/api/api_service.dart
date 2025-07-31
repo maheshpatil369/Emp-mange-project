@@ -2,12 +2,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
-  // IMPORTANT: Yahan apne backend ka URL daalein.
-  // Android emulator ke liye '10.0.2.2' use karein (ye aapke host machine ke localhost ko point karega).
-  // Physical device ya web ke liye, apne backend ka public IP/domain use karein.
-  final String _baseUrl = 'http://localhost:8000/api'; 
+  // Use environment configuration for base URL
+  final String _baseUrl = dotenv.env['VITE_API_BASE_URL'] ??
+      'https://your-default-production-url.com/api';
+  // this production url refers to the backend url after hosting it
 
   // Login function: Authenticates user and saves the token locally.
   Future<String> login(String email, String password) async {
@@ -19,23 +20,27 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final responseBody = json.decode(response.body);
-      print('Login API 200 OK. Response body: $responseBody'); // DEBUG: Print full response body
+      print(
+          'Login API 200 OK. Response body: $responseBody'); // DEBUG: Print full response body
 
-      if (responseBody['success'] == true && responseBody['token'] != null) {
+      if (responseBody['token'] != null) {
         final token = responseBody['token'];
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', token); // Login ke baad token SharedPreferences mein save karein
+        await prefs.setString('token', token);
         print('Login successful, token saved: $token'); // Debugging print
         return token;
       } else {
-        // This is where the "Login successful" exception might be coming from
-        print('Login API 200 OK, but success:false or token missing. Message: ${responseBody['message']}'); // DEBUG
-        throw Exception(responseBody['message'] ?? 'Invalid response from server (success:false or token missing).');
+        print(
+            'Login API 200 OK, but token missing. Message: ${responseBody['message']}'); // DEBUG
+        throw Exception(responseBody['message'] ??
+            'Invalid response from server (token missing).');
       }
     } else {
       // Server se non-200 status code aane par error message
-      print('Login API failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
-      throw Exception('Failed to login. Status Code: ${response.statusCode}, Body: ${response.body}');
+      print(
+          'Login API failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
+      throw Exception(
+          'Failed to login. Status Code: ${response.statusCode}, Body: ${response.body}');
     }
   }
 
@@ -60,18 +65,37 @@ class ApiService {
     try {
       final headers = await _getHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/data/config'),
+        Uri.parse('$_baseUrl/data/config'), // Fixed endpoint
         headers: headers,
       );
 
+      print('Config API Response Status Code: ${response.statusCode}');
+      print('Config API Response Body: ${response.body}');
+
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        final responseBody = json.decode(response.body);
+
+        // Validate the response structure
+        if (responseBody is! Map<String, dynamic>) {
+          throw Exception(
+              'Invalid response format. Expected a Map, got ${responseBody.runtimeType}');
+        }
+
+        // Optional: Add more specific validation if needed
+        if (!responseBody.containsKey('locations') ||
+            !responseBody.containsKey('talukas')) {
+          throw Exception('Missing required configuration keys');
+        }
+
+        return responseBody;
       } else {
-        print('Fetch config failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
+        print(
+            'Fetch config failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
         throw Exception('Failed to load configuration: ${response.body}');
       }
-    } catch (e) {
-      print('Exception during fetchConfig: $e'); // Debugging print
+    } catch (e, stackTrace) {
+      print('Exception during fetchConfig: $e');
+      print('Stacktrace: $stackTrace');
       rethrow; // Re-throw the exception to be caught by the provider
     }
   }
@@ -86,12 +110,15 @@ class ApiService {
         headers: headers,
         body: json.encode({'taluka': taluka}),
       );
+      print('Assign bundle request body: ${json.encode({'taluka': taluka})}');
 
       if (response.statusCode != 200) {
-        print('Assign bundle failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
+        print(
+            'Assign bundle failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
         throw Exception('Failed to assign bundle: ${response.body}');
       }
-      print('Bundle assigned successfully via API for taluka: $taluka'); // Debugging print
+      print(
+          'Bundle assigned successfully via API for taluka: $taluka'); // Debugging print
     } catch (e) {
       print('Exception during assignBundle: $e'); // Debugging print
       rethrow;
@@ -110,9 +137,10 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data['records'] ?? data['content'] ?? []; 
+        return data['records'] ?? data['content'] ?? [];
       } else {
-        print('Download assigned file failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
+        print(
+            'Download assigned file failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
         throw Exception('Failed to download data: ${response.body}');
       }
     } catch (e) {
@@ -133,11 +161,13 @@ class ApiService {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-         final responseBody = json.decode(response.body);
-         print('Sync processed records successful: ${responseBody['success']}'); // Debugging print
-         return responseBody['success'] ?? false;
+        final responseBody = json.decode(response.body);
+        print(
+            'Sync processed records successful: ${responseBody['success']}'); // Debugging print
+        return responseBody['success'] ?? false;
       } else {
-        print('Sync processed records failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
+        print(
+            'Sync processed records failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
         throw Exception('Failed to sync data: ${response.body}');
       }
     } catch (e) {

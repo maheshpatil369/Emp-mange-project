@@ -29,12 +29,27 @@ class _LoginScreenState extends State<LoginScreen> {
         _emailController.text,
         _passwordController.text,
       );
-      // Login successful hone par home screen par navigate karein
-      Navigator.of(context).pushReplacementNamed('/home');
+
+      // Check if login was successful
+      if (authProvider.isAuthenticated) {
+        // Login successful hone par home screen par navigate karein
+        Navigator.of(context).pushReplacementNamed('/home');
+      } else {
+        // Show error message if authentication failed
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authProvider.errorMessage ?? 'Login failed'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } catch (e) {
-      // Error hone par SnackBar dikhayein
+      // Unexpected error handling
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(authProvider.errorMessage ?? 'Login failed')),
+        SnackBar(
+          content: Text('An unexpected error occurred: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -85,8 +100,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   return ElevatedButton(
                     onPressed: authProvider.isLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white, backgroundColor: Colors.blueAccent,
-                      padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.blueAccent,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 50, vertical: 15),
                       textStyle: const TextStyle(fontSize: 18),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),

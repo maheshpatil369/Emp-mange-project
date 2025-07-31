@@ -42,7 +42,9 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(dataProvider.errorMessage ?? 'Failed to assign bundle.')),
+        SnackBar(
+            content:
+                Text(dataProvider.errorMessage ?? 'Failed to assign bundle.')),
       );
     }
   }
@@ -59,7 +61,9 @@ class _HomeScreenState extends State<HomeScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (dataProvider.errorMessage != null && !dataProvider.isLoadingConfig && dataProvider.districts.isEmpty) {
+          if (dataProvider.errorMessage != null &&
+              !dataProvider.isLoadingConfig &&
+              dataProvider.districts.isEmpty) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -83,76 +87,88 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             );
           }
-          
+
           List<String> availableTalukas = dataProvider.talukas;
 
           return Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Assign New Work Bundle',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 20),
-
-                DropdownButtonFormField<String>(
-                  value: _selectedDistrict,
-                  hint: const Text('Select District'),
-                  items: dataProvider.districts.map((district) {
-                    return DropdownMenuItem(
-                      value: district,
-                      child: Text(district),
-                    );
-                  }).toList(),
-                  onChanged: (newValue) {
-                    setState(() {
-                      _selectedDistrict = newValue;
-                      _selectedTaluka = null;
-                    });
-                  },
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'District',
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Assign New Work Bundle',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                ),
-                const SizedBox(height: 15),
-
-                DropdownButtonFormField<String>(
-                  value: _selectedTaluka,
-                  hint: const Text('Select Taluka'),
-                  items: availableTalukas.map((taluka) {
-                    return DropdownMenuItem(
-                      value: taluka,
-                      child: Text(taluka),
-                    );
-                  }).toList(),
-                  onChanged: (newValue) {
-                    setState(() {
-                      _selectedTaluka = newValue;
-                    });
-                  },
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Taluka',
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                ElevatedButton(
-                  onPressed: dataProvider.isAssigningBundle ? null : _assignBundle,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                  ),
-                  child: dataProvider.isAssigningBundle
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Assign Bundle',
-                          style: TextStyle(fontSize: 18),
+                  const SizedBox(height: 20),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _selectedDistrict,
+                    hint: const Text('Select District'),
+                    items: dataProvider.districts.map((district) {
+                      return DropdownMenuItem(
+                        value: district,
+                        child: Text(
+                          district,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                ),
-              ],
+                      );
+                    }).toList(),
+                    onChanged: (newValue) {
+                      setState(() {
+                        _selectedDistrict = newValue;
+                        _selectedTaluka = null;
+                      });
+                    },
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'District',
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _selectedTaluka,
+                    hint: const Text('Select Taluka'),
+                    items: availableTalukas.map((taluka) {
+                      return DropdownMenuItem(
+                        value: taluka,
+                        child: Text(
+                          taluka,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (newValue) {
+                      setState(() {
+                        _selectedTaluka = newValue;
+                      });
+                    },
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Taluka',
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _assignBundle, // Remove conditional disabling
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                    ),
+                    child: dataProvider.isAssigningBundle
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            'Assign Bundle',
+                            style: TextStyle(fontSize: 18),
+                          ),
+                  ),
+                ],
+              ),
             ),
           );
         },
