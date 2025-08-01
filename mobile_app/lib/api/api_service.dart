@@ -102,7 +102,7 @@ class ApiService {
 
   // Work bundle assign karne ke liye.
   // Calls backend endpoint: POST /api/data/bundles/assign
-  Future<void> assignBundle(String taluka) async {
+  Future<Map<String, dynamic>> assignBundle(String taluka) async {
     try {
       final headers = await _getHeaders();
       final response = await http.post(
@@ -117,8 +117,12 @@ class ApiService {
             'Assign bundle failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
         throw Exception('Failed to assign bundle: ${response.body}');
       }
+
+      // Parse and return the full response
+      final responseBody = json.decode(response.body);
       print(
           'Bundle assigned successfully via API for taluka: $taluka'); // Debugging print
+      return responseBody;
     } catch (e) {
       print('Exception during assignBundle: $e'); // Debugging print
       rethrow;
@@ -127,25 +131,22 @@ class ApiService {
 
   // Assigned file download karne ke liye (records).
   // Calls backend endpoint: GET /api/data/assigned-file
-  Future<List<dynamic>> downloadAssignedFile() async {
-    try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/data/assigned-file'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['records'] ?? data['content'] ?? [];
+  Future<List<Map<String, dynamic>>> fetchAssignedFile() async {
+    final headers = await _getHeaders();
+    final response = await http.get(
+      Uri.parse('$_baseUrl/data/assigned-file'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data is List) {
+        print("SEKO DA");
+        return List<Map<String, dynamic>>.from(data);
       } else {
-        print(
-            'Download assigned file failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print
-        throw Exception('Failed to download data: ${response.body}');
+        throw Exception('Unexpected response format: $data');
       }
-    } catch (e) {
-      print('Exception during downloadAssignedFile: $e'); // Debugging print
-      rethrow;
+    } else {
+      throw Exception('Failed to fetch assigned file: ${response.body}');
     }
   }
 
@@ -172,6 +173,26 @@ class ApiService {
       }
     } catch (e) {
       print('Exception during syncProcessedRecords: $e'); // Debugging print
+      rethrow;
+    }
+  }
+
+  // Fetch user's active bundles from the server
+  Future<Map<String, dynamic>> fetchActiveBundles() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/data/bundles/active'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        throw Exception('Failed to fetch active bundles: ${response.body}');
+      }
+    } catch (e) {
+      print('Exception during fetchActiveBundles: $e');
       rethrow;
     }
   }

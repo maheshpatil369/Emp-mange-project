@@ -11,7 +11,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String? _selectedDistrict;
+  String? _selectedDistrictSlug;
   String? _selectedTaluka;
 
   @override
@@ -37,8 +37,9 @@ class _HomeScreenState extends State<HomeScreen> {
         const SnackBar(content: Text('Work bundle assigned successfully!')),
       );
       setState(() {
-        _selectedDistrict = null;
+        _selectedDistrictSlug = null;
         _selectedTaluka = null;
+        dataProvider.selectDistrict(null); // Also reset provider state
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,7 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
 
-          List<String> availableTalukas = dataProvider.talukas;
+          List<String> availableTalukas = dataProvider.filteredTalukas;
 
           return Padding(
             padding: const EdgeInsets.all(16.0),
@@ -104,22 +105,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 20),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: _selectedDistrict,
+                    value: _selectedDistrictSlug,
                     hint: const Text('Select District'),
+                    // UPDATED: Items are now maps of {name, slug}
                     items: dataProvider.districts.map((district) {
                       return DropdownMenuItem(
-                        value: district,
-                        child: Text(
-                          district,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        value: district['slug'], // The value is the slug
+                        child:
+                            Text(district['name']!), // The display is the name
                       );
                     }).toList(),
-                    onChanged: (newValue) {
+                    onChanged: (newSlug) {
                       setState(() {
-                        _selectedDistrict = newValue;
+                        _selectedDistrictSlug = newSlug;
                         _selectedTaluka = null;
                       });
+                      // UPDATED: Tell the provider about the change
+                      dataProvider.selectDistrict(newSlug);
                     },
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
