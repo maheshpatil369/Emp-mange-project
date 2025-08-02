@@ -673,6 +673,7 @@ class _DataScreenState extends State<DataScreen> {
   Widget _buildRecordDetails() {
     final record = _selectedRecord!;
     final fields = [
+      {'label': 'Unique ID', 'key': 'Unique ID'},
       {'label': 'Correction Details', 'key': 'Correction Details'},
       {'label': 'Crop Name', 'key': 'Crop Name'},
       {'label': 'Farmer Name', 'key': 'Farmer Name'},
@@ -680,7 +681,6 @@ class _DataScreenState extends State<DataScreen> {
       {'label': 'PDF Required', 'key': 'PDF Required'},
       {'label': 'Search from', 'key': 'Search from'},
       {'label': 'Taluka', 'key': 'Taluka'},
-      {'label': 'Unique ID', 'key': 'Unique ID'},
     ];
 
     return Column(
@@ -730,6 +730,7 @@ class _DataScreenState extends State<DataScreen> {
                   value,
                   style: TextStyle(
                     fontSize: 12,
+                    fontWeight: isUniqueId ? FontWeight.bold : FontWeight.w600,
                     color: isSearchFrom
                         ? Colors.green[700]
                         : isUniqueId
@@ -756,38 +757,39 @@ class _DataScreenState extends State<DataScreen> {
               backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
             ),
-            onPressed: _selectedRecord != null
-                ? () async {
-                    try {
-                      final provider =
-                          Provider.of<DataProvider>(context, listen: false);
-                      final uniqueId =
-                          await provider.generateUniqueId(_selectedRecord!);
+            onPressed:
+                (_selectedRecord != null && !_hasUniqueId(_selectedRecord!))
+                    ? () async {
+                        try {
+                          final provider =
+                              Provider.of<DataProvider>(context, listen: false);
+                          final uniqueId =
+                              await provider.generateUniqueId(_selectedRecord!);
 
-                      setState(() {
-                        _isUniqueIdGenerated = true;
-                        // Add the generated unique ID to the selected record
-                        _selectedRecord =
-                            Map<String, dynamic>.from(_selectedRecord!)
-                              ..['Unique ID'] = uniqueId;
-                      });
+                          setState(() {
+                            _isUniqueIdGenerated = true;
+                            // Add the generated unique ID to the selected record
+                            _selectedRecord =
+                                Map<String, dynamic>.from(_selectedRecord!)
+                                  ..['Unique ID'] = uniqueId;
+                          });
 
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Unique ID generated: $uniqueId'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error generating unique ID: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                : null,
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Unique ID generated: $uniqueId'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error generating unique ID: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    : null,
           ),
         ),
         const SizedBox(width: 12),

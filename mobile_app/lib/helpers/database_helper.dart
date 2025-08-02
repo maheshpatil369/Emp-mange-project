@@ -23,8 +23,8 @@ class DatabaseHelper {
 
   static Database? _database;
 
-  // Increment database version to trigger onCreate
-  static const int _databaseVersion = 2;
+  // Increment database version to trigger new upgrade
+  static const int _databaseVersion = 3;
 
   // Get the full path of the database
   Future<String> getDatabasePath() async {
@@ -102,7 +102,7 @@ class DatabaseHelper {
     print('Upgrading database from $oldVersion to $newVersion');
 
     // Add migration steps if needed
-    if (oldVersion < 2) {
+    if (oldVersion < 3) {
       // Create bundles table if it doesn't exist
       await db.execute('''
         CREATE TABLE IF NOT EXISTS bundles(
@@ -114,6 +114,9 @@ class DatabaseHelper {
         )
       ''');
       print('Bundles table created during upgrade');
+      // Add 'count' column if upgrading from a version without it
+      await db.execute('ALTER TABLE bundles ADD COLUMN count INTEGER');
+      print('Added count column to bundles table');
     }
   }
 
@@ -121,14 +124,14 @@ class DatabaseHelper {
   Future<void> _onCreate(Database db, int version) async {
     try {
       // Members table
-      await db.execute('''
-          CREATE TABLE members(
-            id TEXT PRIMARY KEY,
-            name TEXT,
-            taluka TEXT
-          )
-        ''');
-      print('Members table created successfully');
+      // await db.execute('''
+      //     CREATE TABLE members(
+      //       id TEXT PRIMARY KEY,
+      //       name TEXT,
+      //       taluka TEXT
+      //     )
+      //   ''');
+      // print('Members table created successfully');
 
       // Bundles table
       await db.execute('''
@@ -137,7 +140,8 @@ class DatabaseHelper {
           bundleNo INTEGER,
           taluka TEXT,
           assignedAt TEXT,
-          status TEXT DEFAULT 'active'
+          status TEXT DEFAULT 'active',
+          count INTEGER
         )
       ''');
       print('Bundles table created successfully');
@@ -200,7 +204,8 @@ class DatabaseHelper {
             bundleNo INTEGER,
             taluka TEXT,
             assignedAt TEXT,
-            status TEXT DEFAULT 'active'
+            status TEXT DEFAULT 'active',
+            count INTEGER
           )
         ''');
         print('Bundles table created on-the-fly');
@@ -210,7 +215,8 @@ class DatabaseHelper {
         'bundleNo': bundleData['bundleNo'],
         'taluka': bundleData['taluka'],
         'assignedAt': DateTime.now().toIso8601String(),
-        'status': bundleData['status'] ?? 'active'
+        'status': bundleData['status'] ?? 'active',
+        'count': bundleData['count'] ?? 0, // Default to 0 if not provided
       };
       // Validate required fields
       if (bundleToInsert['bundleNo'] == null ||
@@ -245,9 +251,23 @@ class DatabaseHelper {
   Future<int> updateBundle(Map<String, dynamic> bundleData) async {
     final db = await database;
     final bundleNo = bundleData['bundleNo'];
+
+    // Only update the fields that exist in the table and are present in the response.
+    final Map<String, dynamic> updateFields = {};
+    if (bundleData.containsKey('taluka'))
+      updateFields['taluka'] = bundleData['taluka'];
+    if (bundleData.containsKey('count'))
+      updateFields['count'] = bundleData['count'];
+
+    // Ensure there are fields to update before calling the database.
+    if (updateFields.isEmpty) {
+      print("No fields to update for bundle $bundleNo.");
+      return 0;
+    }
+
     return await db.update(
       'bundles',
-      bundleData,
+      updateFields,
       where: 'bundleNo = ?',
       whereArgs: [bundleNo],
     );
