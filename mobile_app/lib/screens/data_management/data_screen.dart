@@ -28,10 +28,9 @@ class _DataScreenState extends State<DataScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final dataProvider = Provider.of<DataProvider>(context, listen: false);
-      // dataProvider.fetchLocalData();
+      dataProvider.fetchAndSyncBundles();
       dataProvider.fetchServerBundles();
       _loadTempRecords();
-      // _fetchLocalBundles();
     });
     _searchController.addListener(_onSearchChanged);
   }
@@ -59,7 +58,6 @@ class _DataScreenState extends State<DataScreen> {
   //   final dataProvider = Provider.of<DataProvider>(context, listen: false);
   //   try {
   //     final bundles = await dataProvider.getLocalBundles();
-
   //     // Print bundle details for debugging
   //     print('Active Bundles:');
   //     for (var bundle in bundles) {
@@ -68,7 +66,6 @@ class _DataScreenState extends State<DataScreen> {
   //         print('$key: $value');
   //       });
   //     }
-
   //     setState(() {
   //       _localBundles = bundles;
   //     });
@@ -111,9 +108,7 @@ class _DataScreenState extends State<DataScreen> {
 
   void _refreshData() {
     final dataProvider = Provider.of<DataProvider>(context, listen: false);
-    // dataProvider.fetchLocalData();
-    // _fetchLocalBundles();
-    dataProvider.fetchServerBundles();
+    dataProvider.fetchAndSyncBundles(); // Replaced with new method
   }
 
   @override
@@ -591,28 +586,61 @@ class _DataScreenState extends State<DataScreen> {
   }
 
   Widget _buildServerBundlesList(DataProvider dataProvider) {
-    final bundles = dataProvider.serverBundles;
-    if (bundles.isEmpty) {
-      return const Center(child: Text('No active bundles found on server.'));
+    if (dataProvider.isLoadingBundles) {
+      return const Center(child: CircularProgressIndicator());
     }
-    return ListView.builder(
-      itemCount: bundles.length,
-      itemBuilder: (context, index) {
-        final bundle = bundles[index];
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: ListTile(
-            title: Text('Bundle #${bundle['bundleNo']}'),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+
+    final bundles = dataProvider.serverBundles;
+
+    if (bundles.isEmpty) {
+      final message = dataProvider.isOffline
+          ? 'No bundles found in local storage.'
+          : 'No active bundles found on server.';
+      return Center(child: Text(message));
+    }
+
+    return Column(
+      children: [
+        if (dataProvider.isOffline)
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Taluka: ${bundle['taluka']}'),
-                Text('Count: ${bundle['count']}'),
+                Icon(Icons.wifi_off, color: Colors.orange),
+                SizedBox(width: 8),
+                Text(
+                  'Displaying bundles from local storage (Offline)',
+                  style: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: Colors.orange,
+                  ),
+                ),
               ],
             ),
           ),
-        );
-      },
+        Expanded(
+          child: ListView.builder(
+            itemCount: bundles.length,
+            itemBuilder: (context, index) {
+              final bundle = bundles[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: ListTile(
+                  title: Text('Bundle #${bundle['bundleNo']}'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Taluka: ${bundle['taluka']}'),
+                      Text('Count: ${bundle['count']}'),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 

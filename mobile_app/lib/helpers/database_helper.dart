@@ -148,90 +148,92 @@ class DatabaseHelper {
   }
 
   // Saare records local database se fetch karne ke liye (for DataScreen)
-  Future<List<Member>> getLocalRecords() async {
-    try {
-      final db = await database;
-      final List<Map<String, dynamic>> maps = await db.query('members');
+  // Future<List<Member>> getLocalRecords() async {
+  //   try {
+  //     final db = await database;
+  //     final List<Map<String, dynamic>> maps = await db.query('members');
+  //     // Query results (maps) ko List<Member> objects mein convert karein
+  //     return List.generate(maps.length, (i) {
+  //       return Member.fromMap(maps[i]);
+  //     });
+  //   } catch (e) {
+  //     print('Error fetching records: $e');
+  //     rethrow;
+  //   }
+  // }
 
-      // Query results (maps) ko List<Member> objects mein convert karein
-      return List.generate(maps.length, (i) {
-        return Member.fromMap(maps[i]);
-      });
-    } catch (e) {
-      print('Error fetching records: $e');
+  // Insert a new bundle
+  Future<int> insertBundle(Map<String, dynamic> bundleData) async {
+    try {
+      print("Attempting to insert bundle: $bundleData");
+      final db = await database;
+      // Verify database is open
+      if (!db.isOpen) {
+        throw DatabaseOperationException('Database is not open');
+      }
+      // Check if bundles table exists
+      final tableExists = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='bundles'");
+      if (tableExists.isEmpty) {
+        // Attempt to create table if it doesn't exist
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS bundles(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bundleNo INTEGER,
+            taluka TEXT,
+            assignedAt TEXT,
+            status TEXT DEFAULT 'active'
+          )
+        ''');
+        print('Bundles table created on-the-fly');
+      }
+      // Prepare bundle data
+      final bundleToInsert = {
+        'bundleNo': bundleData['bundleNo'],
+        'taluka': bundleData['taluka'],
+        'assignedAt': DateTime.now().toIso8601String(),
+        'status': bundleData['status'] ?? 'active'
+      };
+      // Validate required fields
+      if (bundleToInsert['bundleNo'] == null ||
+          bundleToInsert['taluka'] == null) {
+        throw DatabaseOperationException(
+            'Bundle number and taluka are required');
+      }
+      final insertResult = await db.insert(
+        'bundles',
+        bundleToInsert,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print("Bundle inserted successfully. Row ID: $insertResult");
+      return insertResult;
+    } catch (e, stackTrace) {
+      print('Error inserting bundle: $e');
+      print('Stacktrace: $stackTrace');
+      // Additional diagnostic information
+      try {
+        final db = await database;
+        final tables = await db
+            .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+        print('Existing tables: $tables');
+      } catch (diagnosisError) {
+        print('Additional diagnosis failed: $diagnosisError');
+      }
       rethrow;
     }
   }
 
-  // Insert a new bundle
-  // Future<int> insertBundle(Map<String, dynamic> bundleData) async {
-  //   try {
-  //     print("Attempting to insert bundle: $bundleData");
-  //     final db = await database;
-
-  //     // Verify database is open
-  //     if (!db.isOpen) {
-  //       throw DatabaseOperationException('Database is not open');
-  //     }
-
-  //     // Check if bundles table exists
-  //     final tableExists = await db.rawQuery(
-  //         "SELECT name FROM sqlite_master WHERE type='table' AND name='bundles'");
-
-  //     if (tableExists.isEmpty) {
-  //       // Attempt to create table if it doesn't exist
-  //       await db.execute('''
-  //         CREATE TABLE IF NOT EXISTS bundles(
-  //           id INTEGER PRIMARY KEY AUTOINCREMENT,
-  //           bundleNo INTEGER,
-  //           taluka TEXT,
-  //           assignedAt TEXT,
-  //           status TEXT DEFAULT 'active'
-  //         )
-  //       ''');
-  //       print('Bundles table created on-the-fly');
-  //     }
-
-  //     // Prepare bundle data
-  //     final bundleToInsert = {
-  //       'bundleNo': bundleData['bundleNo'],
-  //       'taluka': bundleData['taluka'],
-  //       'assignedAt': DateTime.now().toIso8601String(),
-  //       'status': bundleData['status'] ?? 'active'
-  //     };
-
-  //     // Validate required fields
-  //     if (bundleToInsert['bundleNo'] == null ||
-  //         bundleToInsert['taluka'] == null) {
-  //       throw DatabaseOperationException(
-  //           'Bundle number and taluka are required');
-  //     }
-
-  //     final insertResult = await db.insert(
-  //       'bundles',
-  //       bundleToInsert,
-  //       conflictAlgorithm: ConflictAlgorithm.replace,
-  //     );
-
-  //     print("Bundle inserted successfully. Row ID: $insertResult");
-  //     return insertResult;
-  //   } catch (e, stackTrace) {
-  //     print('Error inserting bundle: $e');
-  //     print('Stacktrace: $stackTrace');
-
-  //     // Additional diagnostic information
-  //     try {
-  //       final db = await database;
-  //       final tables = await db
-  //           .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
-  //       print('Existing tables: $tables');
-  //     } catch (diagnosisError) {
-  //       print('Additional diagnosis failed: $diagnosisError');
-  //     }
-
-  //     rethrow;
-  //   }
-  // }
+  // NEW METHOD: Update an existing bundle in the database
+  Future<int> updateBundle(Map<String, dynamic> bundleData) async {
+    final db = await database;
+    final bundleNo = bundleData['bundleNo'];
+    return await db.update(
+      'bundles',
+      bundleData,
+      where: 'bundleNo = ?',
+      whereArgs: [bundleNo],
+    );
+  }
 
   Future<void> insertRawRecords(List<Map<String, dynamic>> records) async {
     final db = await database;
@@ -254,19 +256,19 @@ class DatabaseHelper {
   }
 
   // Fetch all active bundles
-  // Future<List<Map<String, dynamic>>> getActiveLocalBundles() async {
-  //   try {
-  //     final db = await database;
-  //     final List<Map<String, dynamic>> bundles =
-  //         await db.query('bundles', where: 'status = ?', whereArgs: ['active']);
+  Future<List<Map<String, dynamic>>> getActiveLocalBundles() async {
+    try {
+      final db = await database;
+      final List<Map<String, dynamic>> bundles =
+          await db.query('bundles', where: 'status = ?', whereArgs: ['active']);
 
-  //     print("Fetched ${bundles.length} active bundles");
-  //     return bundles;
-  //   } catch (e) {
-  //     print('Error fetching active bundles: $e');
-  //     rethrow;
-  //   }
-  // }
+      print("Fetched ${bundles.length} active bundles");
+      return bundles;
+    } catch (e) {
+      print('Error fetching active bundles: $e');
+      rethrow;
+    }
+  }
 
   // Update bundle status
   Future<int> updateBundleStatus(int bundleNo, String status) async {

@@ -52,6 +52,8 @@ class DataProvider with ChangeNotifier {
 
   final List<Member> _records = [];
   List<Map<String, dynamic>> _serverBundles = [];
+  bool _isLoadingBundles = false;
+  bool _isOffline = false;
   final bool _isLoadingRecords = false;
 
   // Getters
@@ -60,6 +62,8 @@ class DataProvider with ChangeNotifier {
   bool get isLoadingRecords => _isLoadingRecords;
   bool get isLoadingConfig => _isLoadingConfig;
   bool get isAssigningBundle => _isAssigningBundle;
+  bool get isLoadingBundles => _isLoadingBundles;
+  bool get isOffline => _isOffline;
 
   // Modify the constructor to print database path
   DataProvider() {
@@ -126,19 +130,81 @@ class DataProvider with ChangeNotifier {
     }
   }
 
-  Future<void> fetchServerBundles() async {
+  Future<void> fetchAndSyncBundles() async {
+    _isLoadingBundles = true;
+    _errorMessage = null;
+    _isOffline = false;
+    notifyListeners();
+
     try {
-      final response = await _apiService.fetchActiveBundles();
-      // response is a Map<String, dynamic> where each value is a bundle map
-      _serverBundles = response.values
+      // 1. Attempt to fetch from server
+      final serverResponse = await _apiService.fetchActiveBundles();
+      final serverBundlesList = serverResponse.values
           .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
           .toList();
-      notifyListeners();
+
+      // ... (Rest of the sync logic remains the same) ...
+      // 2. Fetch local bundles for comparison
+      final localBundles = await _databaseHelper.getActiveLocalBundles();
+      final localBundlesMap = {for (var b in localBundles) b['bundleNo']: b};
+      final serverBundlesMap = {
+        for (var b in serverBundlesList) b['bundleNo']: b
+      };
+
+      // 3. Determine bundles to add, update, or delete
+      final bundlesToUpdate = <Map<String, dynamic>>[];
+      final bundlesToAdd = <Map<String, dynamic>>[];
+      final bundlesToDelete = <Map<String, dynamic>>[];
+
+      // Check server bundles against local ones
+      for (var serverBundle in serverBundlesList) {
+        final bundleNo = serverBundle['bundleNo'];
+        if (localBundlesMap.containsKey(bundleNo)) {
+          bundlesToUpdate.add(serverBundle);
+        } else {
+          bundlesToAdd.add(serverBundle);
+        }
+      }
+
+      // Check local bundles against server ones
+      for (var localBundle in localBundles) {
+        final bundleNo = localBundle['bundleNo'];
+        if (!serverBundlesMap.containsKey(bundleNo)) {
+          bundlesToDelete.add(localBundle);
+        }
+      }
+
+      // 4. Apply changes to the local database
+      for (var bundle in bundlesToAdd) {
+        await _databaseHelper.insertBundle(bundle);
+      }
+      for (var bundle in bundlesToUpdate) {
+        await _databaseHelper.updateBundle(bundle);
+      }
+      for (var bundle in bundlesToDelete) {
+        await _databaseHelper.updateBundleStatus(bundle['bundleNo'], 'deleted');
+      }
+
+      // 5. Refresh local state from the database and notify listeners
+      _serverBundles = await _databaseHelper.getActiveLocalBundles();
+      _isOffline = false;
+      print('Successfully synced bundles with server.');
     } catch (e) {
-      print('Error fetching server bundles: $e');
-      _serverBundles = [];
+      _errorMessage =
+          'Failed to sync with server. Loading local data: ${e.toString()}';
+      print('Error fetching from server, loading from local DB: $e');
+      _isOffline = true;
+      // Fallback: load bundles from the local database
+      _serverBundles = await _databaseHelper.getActiveLocalBundles();
+    } finally {
+      _isLoadingBundles = false;
       notifyListeners();
     }
+  }
+
+  // The original fetchServerBundles is now replaced by the logic in fetchAndSyncBundles
+  Future<void> fetchServerBundles() async {
+    await fetchAndSyncBundles();
   }
 
   // Method to assign work bundle and store locally
@@ -519,17 +585,14 @@ class DataProvider with ChangeNotifier {
   //   _isLoadingRecords = true;
   //   _errorMessage = null;
   //   notifyListeners();
-
   //   try {
   //     print("GetRecords start");
   //     _records = await _databaseHelper.getLocalRecords();
   //     print("GetRecords end");
-
   //     // If no records found, try to insert sample records
   //     if (_records.isEmpty) {
   //       print("No records found. Attempting to insert sample records.");
   //     }
-
   //     _errorMessage = null;
   //     print('Fetched successfully: ${_records.length} records');
   //   } catch (e) {
