@@ -1,6 +1,7 @@
 // lib/providers/data_provider.dart
 // import 'dart:nativewrappers/_internal/vm/lib/internal_patch.dart';
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../api/api_service.dart';
 import '../helpers/database_helper.dart';
@@ -49,9 +50,9 @@ class DataProvider with ChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  List<Member> _records = [];
+  final List<Member> _records = [];
   List<Map<String, dynamic>> _serverBundles = [];
-  bool _isLoadingRecords = false;
+  final bool _isLoadingRecords = false;
 
   // Getters
   List<Member> get records => _records;
@@ -129,13 +130,9 @@ class DataProvider with ChangeNotifier {
     try {
       final response = await _apiService.fetchActiveBundles();
       // response is a Map<String, dynamic> where each value is a bundle map
-      if (response is Map<String, dynamic>) {
-        _serverBundles = response.values
-            .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
-            .toList();
-      } else {
-        _serverBundles = [];
-      }
+      _serverBundles = response.values
+          .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
+          .toList();
       notifyListeners();
     } catch (e) {
       print('Error fetching server bundles: $e');
@@ -242,18 +239,278 @@ class DataProvider with ChangeNotifier {
     }
   }
 
-  // Search through local raw records
+  // Search through local raw records by "Search from" field with partial matching
   Future<List<Map<String, dynamic>>> searchLocalRecords(String query) async {
     try {
       if (query.trim().isEmpty) {
         return [];
       }
-      final results = await _databaseHelper.searchRawRecords(query);
-      print('Found ${results.length} records matching "$query"');
+
+      final cleanQuery = query.trim();
+      final results = await _databaseHelper.searchRawRecords(cleanQuery);
+      print(
+          'Found ${results.length} records containing "$cleanQuery" in "Search from" field');
       return results;
     } catch (e) {
       print('Error searching local records: $e');
       return [];
+    }
+  }
+
+  // Hardcoded mappings for location and taluka abbreviations
+  static const Map<String, String> _locationAbbreviations = {
+    'ahilyanagar': 'AN',
+    'chhatrapati-sambhajinagar': 'CS',
+  };
+
+  static const Map<String, String> _talukaAbbreviations = {
+    // Ahilyanagar talukas
+    'Ahmednagar': 'AH',
+    'Jamkhed': 'JA',
+    'Karjat': 'KA',
+    'Kopargaon': 'KO',
+    'Nevasa': 'NE',
+    'Parner': 'PA',
+    'Pathardi': 'PT',
+    'Rahata': 'RA',
+    'Rahuri': 'RH',
+    'Sangamner': 'SA',
+    'Shevgaon': 'SH',
+    'Shirdi': 'SI',
+    'Shrigonda': 'SR',
+    'Akole': 'AK',
+
+    // Chhatrapati Sambhajinagar talukas
+    'Aurangabad': 'AU',
+    'Gangapur': 'GA',
+    'Kannad': 'KN',
+    'Khultabad': 'KH',
+    'Paithan': 'PA',
+    'Sillod': 'SI',
+    'Vaijapur': 'VA',
+    'Phulambri': 'PH',
+    'Soegaon': 'SO',
+  };
+
+  // Generate unique ID for a record
+  Future<String> generateUniqueId(Map<String, dynamic> record) async {
+    try {
+      final talukaName = record['Taluka']?.toString().trim();
+      if (talukaName == null || talukaName.isEmpty) {
+        throw Exception('Taluka name is required for generating unique ID');
+      }
+
+      // Get taluka abbreviation
+      final talukaAbbr = _talukaAbbreviations[talukaName];
+      if (talukaAbbr == null) {
+        throw Exception('No abbreviation found for taluka: $talukaName');
+      }
+
+      // Find location for this taluka using the config data
+      String? locationSlug;
+      for (final location in _fullLocationData) {
+        final talukas = List<String>.from(location['talukas'] ?? []);
+        if (talukas.contains(talukaName)) {
+          locationSlug = location['slug'];
+          break;
+        }
+      }
+
+      if (locationSlug == null) {
+        throw Exception('Location not found for taluka: $talukaName');
+      }
+
+      // Get location abbreviation
+      final locationAbbr = _locationAbbreviations[locationSlug];
+      if (locationAbbr == null) {
+        throw Exception('No abbreviation found for location: $locationSlug');
+      }
+
+      // Find next sequence number for this taluka
+      final nextSequence =
+          await _getNextSequenceNumber(locationAbbr, talukaAbbr);
+
+      // Generate unique ID
+      final uniqueId = '$locationAbbr$talukaAbbr$nextSequence';
+      print('Generated unique ID: $uniqueId for taluka: $talukaName');
+
+      // Store the unique ID in permanent storage
+      final searchFromValue = record['Search from'] ??
+          record['Search From'] ??
+          record['search from'];
+      if (searchFromValue != null) {
+        await _databaseHelper.updateRecordWithUniqueId(
+            searchFromValue.toString(), uniqueId);
+      }
+
+      return uniqueId;
+    } catch (e) {
+      print('Error generating unique ID: $e');
+      rethrow;
+    }
+  }
+
+  // Get next sequence number for a specific taluka
+  Future<int> _getNextSequenceNumber(
+      String locationAbbr, String talukaAbbr) async {
+    try {
+      print(
+          '=== DEBUG: Getting next sequence for $locationAbbr$talukaAbbr ===');
+
+      // Get all existing records from local database
+      final allRecords = await _databaseHelper.getAllRawRecords();
+      print('DEBUG: Found ${allRecords.length} records in raw_records table');
+
+      // Get all records from temporary sync table
+      final tempRecords = await _databaseHelper.getRecordsToSync();
+      print(
+          'DEBUG: Found ${tempRecords.length} records in records_to_sync table');
+
+      // Filter records that have the same location and taluka pattern
+      final pattern = RegExp('^$locationAbbr$talukaAbbr\\d+\$');
+      final existingIds = <int>{};
+
+      // Check records in raw_records table
+      for (final record in allRecords) {
+        final recordData =
+            json.decode(record['data'] as String) as Map<String, dynamic>;
+        final uniqueId = recordData['Unique ID']?.toString();
+
+        if (uniqueId != null && pattern.hasMatch(uniqueId)) {
+          // Extract sequence number from existing ID
+          final sequenceStr = uniqueId.substring(4); // Remove XXYY part
+          final sequence = int.tryParse(sequenceStr);
+          if (sequence != null) {
+            existingIds.add(sequence);
+            print(
+                'DEBUG: Found existing ID in raw_records: $uniqueId (sequence: $sequence)');
+          }
+        }
+      }
+
+      // Check records in records_to_sync table
+      for (final record in tempRecords) {
+        final uniqueId = record['Unique ID']?.toString();
+
+        if (uniqueId != null && pattern.hasMatch(uniqueId)) {
+          // Extract sequence number from existing ID
+          final sequenceStr = uniqueId.substring(4); // Remove XXYY part
+          final sequence = int.tryParse(sequenceStr);
+          if (sequence != null) {
+            existingIds.add(sequence);
+            print(
+                'DEBUG: Found existing ID in records_to_sync: $uniqueId (sequence: $sequence)');
+          }
+        }
+      }
+
+      final sortedIds = existingIds.toList()..sort();
+      print('DEBUG: All existing sequences (unique): $sortedIds');
+
+      // Find next available sequence number
+      if (sortedIds.isEmpty) {
+        print('DEBUG: No existing sequences found, returning 1');
+        return 1;
+      }
+
+      int nextSequence = 1;
+
+      for (final existingSequence in sortedIds) {
+        if (existingSequence == nextSequence) {
+          nextSequence++;
+        } else {
+          break;
+        }
+      }
+
+      print('DEBUG: Next available sequence: $nextSequence');
+      return nextSequence;
+    } catch (e) {
+      print('Error getting next sequence number: $e');
+      return 1; // Default to 1 if error occurs
+    }
+  }
+
+  // Save record to temporary sync table
+  Future<bool> saveRecordToSync(Map<String, dynamic> record) async {
+    try {
+      final success = await _databaseHelper.saveRecordToSync(record);
+      if (success) {
+        notifyListeners();
+      }
+      return success;
+    } catch (e) {
+      print('Error saving record to sync: $e');
+      return false;
+    }
+  }
+
+  // Get records from temporary sync table
+  Future<List<Map<String, dynamic>>> getRecordsToSync() async {
+    try {
+      return await _databaseHelper.getRecordsToSync();
+    } catch (e) {
+      print('Error getting records to sync: $e');
+      return [];
+    }
+  }
+
+  // Get count of records in temporary sync table
+  Future<int> getRecordsToSyncCount() async {
+    try {
+      return await _databaseHelper.getRecordsToSyncCount();
+    } catch (e) {
+      print('Error getting records to sync count: $e');
+      return 0;
+    }
+  }
+
+  // Sync records to server
+  Future<bool> syncRecordsToServer() async {
+    try {
+      final records = await _databaseHelper.getRecordsToSync();
+
+      if (records.isEmpty) {
+        print('No records to sync');
+        return false;
+      }
+
+      final syncData = {
+        'taluka': 'TestTaluka',
+        'bundleNo': 1,
+        'sourceFile': '...',
+        'records': records,
+      };
+
+      print('Syncing ${records.length} records to server...');
+      final success = await _apiService.syncProcessedRecords(syncData);
+
+      if (success) {
+        // Clear the temporary table only if sync was successful
+        await _databaseHelper.clearRecordsToSync();
+        notifyListeners();
+        print('Records synced successfully and temporary table cleared');
+      } else {
+        print('Failed to sync records to server');
+      }
+
+      return success;
+    } catch (e) {
+      print('Error syncing records to server: $e');
+      return false;
+    }
+  }
+
+  // Empty temporary table manually
+  Future<bool> emptyTempTable() async {
+    try {
+      await _databaseHelper.clearRecordsToSync();
+      notifyListeners();
+      print('Temporary table emptied manually');
+      return true;
+    } catch (e) {
+      print('Error emptying temp table: $e');
+      return false;
     }
   }
 

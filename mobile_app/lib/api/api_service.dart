@@ -162,10 +162,13 @@ class ApiService {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        print("response.body: ${response.body}");
         final responseBody = json.decode(response.body);
-        print(
-            'Sync processed records successful: ${responseBody['success']}'); // Debugging print
-        return responseBody['success'] ?? false;
+        final message = responseBody['message']?.toString() ?? '';
+        print('Sync processed records successful: $message'); // Debugging print
+
+        // Check if the message indicates success
+        return message.toLowerCase().contains('successfully');
       } else {
         print(
             'Sync processed records failed with status: ${response.statusCode}, body: ${response.body}'); // Debugging print

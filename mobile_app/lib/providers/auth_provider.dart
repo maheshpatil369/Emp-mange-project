@@ -66,7 +66,7 @@ class AuthProvider with ChangeNotifier {
       final token = await _apiService.login(email, password);
 
       // Verify token is not empty
-      if (token == null || token.isEmpty) {
+      if (token.isEmpty) {
         _errorMessage = 'Invalid login response';
         _user = null;
         print('Login failed: Invalid token'); // Debugging print

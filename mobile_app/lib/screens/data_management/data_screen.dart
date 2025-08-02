@@ -1,5 +1,6 @@
 // lib/screens/data_management/data_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/data_provider.dart';
 import '../../models/member_model.dart';
@@ -13,10 +14,14 @@ class DataScreen extends StatefulWidget {
 
 class _DataScreenState extends State<DataScreen> {
   final TextEditingController _searchController = TextEditingController();
-  List<Member> _filteredRecords = [];
+  final List<Member> _filteredRecords = [];
   // List<Map<String, dynamic>> _localBundles = [];
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
+  Map<String, dynamic>? _selectedRecord;
+  bool _isUniqueIdGenerated = false;
+  List<Map<String, dynamic>> _tempRecords = [];
+  bool _showTempRecords = false;
 
   @override
   void initState() {
@@ -25,9 +30,28 @@ class _DataScreenState extends State<DataScreen> {
       final dataProvider = Provider.of<DataProvider>(context, listen: false);
       // dataProvider.fetchLocalData();
       dataProvider.fetchServerBundles();
+      _loadTempRecords();
       // _fetchLocalBundles();
     });
     _searchController.addListener(_onSearchChanged);
+  }
+
+  Future<void> _loadTempRecords() async {
+    try {
+      final dataProvider = Provider.of<DataProvider>(context, listen: false);
+      final records = await dataProvider.getRecordsToSync();
+      setState(() {
+        _tempRecords = records;
+      });
+    } catch (e) {
+      print('Error loading temp records: $e');
+    }
+  }
+
+  // Check if record has a unique ID (either just generated or previously existing)
+  bool _hasUniqueId(Map<String, dynamic> record) {
+    return record['Unique ID'] != null &&
+        record['Unique ID'].toString().isNotEmpty;
   }
 
   // Method to fetch and print active bundles
@@ -95,141 +119,408 @@ class _DataScreenState extends State<DataScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Consumer<DataProvider>(
-        builder: (context, dataProvider, child) {
-          // Combine records and bundles display
-          return Column(
-            children: [
-              // Search Bar
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search in local records...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
+      body: Stack(
+        children: [
+          // Main content
+          Consumer<DataProvider>(
+            builder: (context, dataProvider, child) {
+              return Column(
+                children: [
+                  // Search Bar with Temp Records Button
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        // Temp Records Button
+                        Container(
+                          decoration: BoxDecoration(
+                            color: _tempRecords.isNotEmpty
+                                ? Colors.orange
+                                : Colors.grey,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: IconButton(
+                            icon: Badge(
+                              label: Text('${_tempRecords.length}'),
+                              isLabelVisible: _tempRecords.isNotEmpty,
+                              child:
+                                  const Icon(Icons.list, color: Colors.white),
+                            ),
                             onPressed: () {
-                              _searchController.clear();
                               setState(() {
-                                _searchResults = [];
-                                _isSearching = false;
+                                _showTempRecords = !_showTempRecords;
                               });
                             },
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Search Field
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Search by "Search from" ID (partial match)...',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _searchController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() {
+                                          _searchResults = [];
+                                          _isSearching = false;
+                                        });
+                                      },
+                                    )
+                                  : null,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey[100],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    filled: true,
-                    fillColor: Colors.grey[100],
                   ),
-                ),
-              ),
 
-              // Search Results
-              if (_searchResults.isNotEmpty || _isSearching)
-                Container(
-                  height: 200,
-                  margin: const EdgeInsets.symmetric(horizontal: 16.0),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[300]!),
-                    borderRadius: BorderRadius.circular(8),
+                  // Temp Records List
+                  if (_showTempRecords && _tempRecords.isNotEmpty)
+                    Container(
+                      height: 200,
+                      margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.orange[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.orange[50],
+                      ),
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.list, color: Colors.orange),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Temporary Records (${_tempRecords.length})',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                                const Spacer(),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 20),
+                                  onPressed: () {
+                                    setState(() {
+                                      _showTempRecords = false;
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: _tempRecords.length,
+                              itemBuilder: (context, index) {
+                                final record = _tempRecords[index];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(
+                                    record['Farmer Name'] ?? 'Unknown',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  subtitle: Text(
+                                    'ID: ${record['Unique ID'] ?? 'N/A'}',
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Search Results
+                  if (_searchResults.isNotEmpty || _isSearching)
+                    Container(
+                      height: 200,
+                      margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: _isSearching
+                          ? const Center(child: CircularProgressIndicator())
+                          : _buildSearchResults(),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.download),
+                            label: const Text('Sync to Device'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () async {
+                              final provider = Provider.of<DataProvider>(
+                                  context,
+                                  listen: false);
+                              await provider.downloadAndStoreAssignedRecords();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Records downloaded and stored locally!')),
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 12), // spacing between buttons
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.delete_sweep),
+                            label: const Text('Empty Temp'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: _tempRecords.isNotEmpty
+                                ? () async {
+                                    try {
+                                      final provider =
+                                          Provider.of<DataProvider>(context,
+                                              listen: false);
+                                      final success =
+                                          await provider.emptyTempTable();
+
+                                      if (success) {
+                                        setState(() {
+                                          _tempRecords = [];
+                                          _showTempRecords = false;
+                                        });
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                                'Temporary table emptied successfully!'),
+                                            backgroundColor: Colors.orange,
+                                          ),
+                                        );
+                                      } else {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                                'Failed to empty temporary table.'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                              'Error emptying temp table: $e'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                : null,
+                          ),
+                          const SizedBox(width: 12), // spacing between buttons
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.sync),
+                            label: const Text('Sync to Server'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: _tempRecords.isNotEmpty
+                                ? () async {
+                                    try {
+                                      final provider =
+                                          Provider.of<DataProvider>(context,
+                                              listen: false);
+                                      final success =
+                                          await provider.syncRecordsToServer();
+
+                                      if (success) {
+                                        final recordCount = _tempRecords.length;
+                                        setState(() {
+                                          _tempRecords = [];
+                                          _showTempRecords = false;
+                                        });
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                                'Successfully synced $recordCount records to server!'),
+                                            backgroundColor: Colors.green,
+                                          ),
+                                        );
+                                      } else {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                                'Failed to sync records to server. Please try again.'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content:
+                                              Text('Error syncing records: $e'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  child: _isSearching
-                      ? const Center(child: CircularProgressIndicator())
-                      : _buildSearchResults(),
-                ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.download),
-                      label: const Text('Sync to Device'),
+                  // Server Bundles Section
+                  const Text(
+                    'Assigned Bundles',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  Expanded(
+                    child: _buildServerBundlesList(dataProvider),
+                  ),
+                  FutureBuilder<int>(
+                    future: Provider.of<DataProvider>(context, listen: false)
+                        .getLocalRecordCount(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.0),
+                          child: Text('Loading record count...'),
+                        );
+                      }
+                      final count = snapshot.data ?? 0;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          '$count records on device',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      );
+                    },
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.delete),
+                      label: const Text('Delete All Local Records'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
+                        backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () async {
                         final provider =
                             Provider.of<DataProvider>(context, listen: false);
-                        await provider.downloadAndStoreAssignedRecords();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text(
-                                  'Records downloaded and stored locally!')),
-                        );
+                        await provider.deleteAllLocalRecords();
+                        setState(() {});
                       },
                     ),
-                    const SizedBox(width: 12), // spacing between buttons
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.sync),
-                      label: const Text('Sync to Server'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: () {
-                        // Call your function here
-                        print("Sync button pressed!");
-                        // Or: await provider.syncStatus();
-                      },
+                  ),
+                ],
+              );
+            },
+          ),
+
+          // Absolute positioned Record Details Section
+          if (_selectedRecord != null)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 400, // Fixed height to prevent overflow
+                margin: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[300]!),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.3),
+                      spreadRadius: 2,
+                      blurRadius: 8,
+                      offset: const Offset(0, -2),
                     ),
                   ],
                 ),
-              ),
-              // Server Bundles Section
-              const Text(
-                'Assigned Bundles',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              Expanded(
-                child: _buildServerBundlesList(dataProvider),
-              ),
-              FutureBuilder<int>(
-                future: Provider.of<DataProvider>(context, listen: false)
-                    .getLocalRecordCount(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8.0),
-                      child: Text('Loading record count...'),
-                    );
-                  }
-                  final count = snapshot.data ?? 0;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text(
-                      '$count records on device',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.description, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Record Details',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () {
+                            setState(() {
+                              _selectedRecord = null;
+                              _isUniqueIdGenerated = false;
+                            });
+                          },
+                        ),
+                      ],
                     ),
-                  );
-                },
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12.0),
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.delete),
-                  label: const Text('Delete All Local Records'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: () async {
-                    final provider =
-                        Provider.of<DataProvider>(context, listen: false);
-                    await provider.deleteAllLocalRecords();
-                    setState(() {});
-                  },
+                    const SizedBox(height: 8),
+                    Text(
+                      'Information for the selected record. Generate an ID and then save.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: _buildRecordDetails(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildActionButtons(),
+                  ],
                 ),
               ),
-            ],
-          );
-        },
+            ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _refreshData,
@@ -241,8 +532,19 @@ class _DataScreenState extends State<DataScreen> {
 
   Widget _buildSearchResults() {
     if (_searchResults.isEmpty) {
-      return const Center(
-        child: Text('No records found matching your search.'),
+      final query = _searchController.text.trim();
+      String message =
+          'No records found containing "$query" in "Search from" field.';
+
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.grey),
+          ),
+        ),
       );
     }
 
@@ -260,6 +562,10 @@ class _DataScreenState extends State<DataScreen> {
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                    'Search ID: ${record['Search from'] ?? record['Search From'] ?? record['search from'] ?? 'N/A'}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, color: Colors.blue)),
                 Text('Crop: ${record['Crop Name'] ?? 'N/A'}'),
                 Text('Taluka: ${record['Taluka'] ?? 'N/A'}'),
                 Text('Intimation No: ${record['Intimation No'] ?? 'N/A'}'),
@@ -267,6 +573,17 @@ class _DataScreenState extends State<DataScreen> {
               ],
             ),
             isThreeLine: true,
+            onTap: () {
+              setState(() {
+                _selectedRecord = record;
+                // Check if record already has a unique ID
+                _isUniqueIdGenerated = _hasUniqueId(record);
+              });
+              // Clear search results after selection
+              _searchController.clear();
+              _searchResults.clear();
+              _isSearching = false;
+            },
           ),
         );
       },
@@ -324,4 +641,175 @@ class _DataScreenState extends State<DataScreen> {
   //     },
   //   );
   // }
+
+  Widget _buildRecordDetails() {
+    final record = _selectedRecord!;
+    final fields = [
+      {'label': 'Correction Details', 'key': 'Correction Details'},
+      {'label': 'Crop Name', 'key': 'Crop Name'},
+      {'label': 'Farmer Name', 'key': 'Farmer Name'},
+      {'label': 'Intimation No', 'key': 'Intimation No'},
+      {'label': 'PDF Required', 'key': 'PDF Required'},
+      {'label': 'Search from', 'key': 'Search from'},
+      {'label': 'Taluka', 'key': 'Taluka'},
+      {'label': 'Unique ID', 'key': 'Unique ID'},
+    ];
+
+    return Column(
+      children: fields.map((field) {
+        final value = record[field['key']]?.toString() ?? 'N/A';
+        final isSearchFrom = field['key'] == 'Search from';
+        final isPdfRequired = field['key'] == 'PDF Required';
+        final isUniqueId = field['key'] == 'Unique ID';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isSearchFrom
+                ? Colors.green[50]
+                : isPdfRequired
+                    ? Colors.lightGreen[50]
+                    : isUniqueId
+                        ? Colors.blue[50]
+                        : Colors.grey[50],
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isSearchFrom
+                  ? Colors.green[200]!
+                  : isPdfRequired
+                      ? Colors.lightGreen[200]!
+                      : isUniqueId
+                          ? Colors.blue[200]!
+                          : Colors.grey[200]!,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 120,
+                child: Text(
+                  '${field['label']}:',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isSearchFrom
+                        ? Colors.green[700]
+                        : isUniqueId
+                            ? Colors.blue[700]
+                            : Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.qr_code),
+            label: const Text('Generate Unique ID'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: _selectedRecord != null
+                ? () async {
+                    try {
+                      final provider =
+                          Provider.of<DataProvider>(context, listen: false);
+                      final uniqueId =
+                          await provider.generateUniqueId(_selectedRecord!);
+
+                      setState(() {
+                        _isUniqueIdGenerated = true;
+                        // Add the generated unique ID to the selected record
+                        _selectedRecord =
+                            Map<String, dynamic>.from(_selectedRecord!)
+                              ..['Unique ID'] = uniqueId;
+                      });
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Unique ID generated: $uniqueId'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error generating unique ID: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                : null,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.save),
+            label: const Text('Save Record'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: (_selectedRecord != null &&
+                    _hasUniqueId(_selectedRecord!))
+                ? () async {
+                    try {
+                      final provider =
+                          Provider.of<DataProvider>(context, listen: false);
+                      final success =
+                          await provider.saveRecordToSync(_selectedRecord!);
+
+                      if (success) {
+                        await _loadTempRecords(); // Refresh temp records list
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Record saved to temporary storage!'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Failed to save record. Temporary storage might be full (250 records limit).'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error saving record: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                : null,
+          ),
+        ),
+      ],
+    );
+  }
 }
