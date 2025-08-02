@@ -7,7 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class ApiService {
   // Use environment configuration for base URL
   final String _baseUrl = dotenv.env['VITE_API_BASE_URL'] ??
-      'https://your-default-production-url.com/api';
+      'https://emp-mange-project.onrender.com/api';
   // this production url refers to the backend url after hosting it
 
   // Login function: Authenticates user and saves the token locally.

@@ -254,10 +254,12 @@ class DatabaseHelper {
 
     // Only update the fields that exist in the table and are present in the response.
     final Map<String, dynamic> updateFields = {};
-    if (bundleData.containsKey('taluka'))
+    if (bundleData.containsKey('taluka')) {
       updateFields['taluka'] = bundleData['taluka'];
-    if (bundleData.containsKey('count'))
+    }
+    if (bundleData.containsKey('count')) {
       updateFields['count'] = bundleData['count'];
+    }
 
     // Ensure there are fields to update before calling the database.
     if (updateFields.isEmpty) {

@@ -53,6 +53,12 @@ class _DataScreenState extends State<DataScreen> {
         record['Unique ID'].toString().isNotEmpty;
   }
 
+  bool _isNotInTempRecords(Map<String, dynamic> record) {
+    return _tempRecords.every((tempRecord) =>
+        tempRecord['Unique ID'] != record['Unique ID'] &&
+        tempRecord['Search from'] != record['Search from']);
+  }
+
   // Method to fetch and print active bundles
   // Future<void> _fetchLocalBundles() async {
   //   final dataProvider = Provider.of<DataProvider>(context, listen: false);
@@ -802,7 +808,8 @@ class _DataScreenState extends State<DataScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: (_selectedRecord != null &&
-                    _hasUniqueId(_selectedRecord!))
+                    _hasUniqueId(_selectedRecord!) &&
+                    _isNotInTempRecords(_selectedRecord!))
                 ? () async {
                     try {
                       final provider =

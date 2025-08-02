@@ -227,19 +227,19 @@ class DataProvider with ChangeNotifier {
         throw Exception('Taluka cannot be empty');
       }
 
-      // // Call API to assign bundle
-      // final bundleResponse = await _apiService.assignBundle(cleanTaluka);
-      //
-      // // Parse bundle details from API response
-      // final bundleData = {
-      //   'bundleNo': bundleResponse['bundle']['bundleNo'],
-      //   'taluka': cleanTaluka,
-      //   'status': 'active'
-      // };
-      // print("MNPK");
-      // // Store bundle in local db
-      // await _databaseHelper.insertBundle(bundleData);
-      // print("MNPK12");
+      // Call API to assign bundle
+      final bundleResponse = await _apiService.assignBundle(cleanTaluka);
+
+      // Parse bundle details from API response
+      final bundleData = {
+        'bundleNo': bundleResponse['bundle']['bundleNo'],
+        'taluka': cleanTaluka,
+        'status': 'active'
+      };
+      print("MNPK");
+      // Store bundle in local db
+      await _databaseHelper.insertBundle(bundleData);
+      print("MNPK12");
       _errorMessage = null;
       print('Bundle assigned and stored successfully for $cleanTaluka');
     } catch (e) {

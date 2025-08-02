@@ -53,41 +53,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home Dashboard'),
-      ),
       body: Consumer<DataProvider>(
         builder: (context, dataProvider, child) {
+          // Check for initial loading state
           if (dataProvider.isLoadingConfig) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (dataProvider.errorMessage != null &&
-              !dataProvider.isLoadingConfig &&
-              dataProvider.districts.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Error: ${dataProvider.errorMessage}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: () {
-                        dataProvider.loadConfig();
-                      },
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
+          // Check if there's an error and no data to display.
+          // Fallback to offline display.
+          bool isOffline = dataProvider.errorMessage != null &&
+              dataProvider.districts.isEmpty;
 
           List<String> availableTalukas = dataProvider.filteredTalukas;
 
@@ -144,11 +120,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       );
                     }).toList(),
-                    onChanged: (newValue) {
-                      setState(() {
-                        _selectedTaluka = newValue;
-                      });
-                    },
+                    onChanged: isOffline
+                        ? null
+                        : (newValue) {
+                            setState(() {
+                              _selectedTaluka = newValue;
+                            });
+                          },
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       labelText: 'Taluka',
@@ -169,6 +147,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: TextStyle(fontSize: 18),
                           ),
                   ),
+                  // Offline Message
+                  if (isOffline)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 20.0),
+                      child: Text(
+                        'Can\'t connect gracefully.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Colors.red[700],
+                            fontStyle: FontStyle.italic),
+                      ),
+                    ),
                 ],
               ),
             ),
