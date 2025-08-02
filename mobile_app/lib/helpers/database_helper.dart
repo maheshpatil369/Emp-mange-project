@@ -141,6 +141,24 @@ class DatabaseHelper {
         )
       ''');
       print('Bundles table created successfully');
+
+      // Add this new table for raw records
+      await db.execute('''
+        CREATE TABLE raw_records (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          data TEXT
+        )
+      ''');
+      print('Raw records table created successfully');
+
+      // Temp sync table
+      await db.execute('''
+        CREATE TABLE records_to_sync (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          data TEXT
+        )
+      ''');
+      print('Records to sync table created successfully');
     } catch (e) {
       print('Error creating tables: $e');
       rethrow;

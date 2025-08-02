@@ -1,6 +1,7 @@
 // lib/providers/data_provider.dart
 // import 'dart:nativewrappers/_internal/vm/lib/internal_patch.dart';
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../api/api_service.dart';
@@ -138,12 +139,16 @@ class DataProvider with ChangeNotifier {
 
     try {
       // 1. Attempt to fetch from server
-      final serverResponse = await _apiService.fetchActiveBundles();
+      final serverResponse = await _apiService.fetchActiveBundles().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw TimeoutException('Server request timed out');
+        },
+      );
       final serverBundlesList = serverResponse.values
           .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
           .toList();
 
-      // ... (Rest of the sync logic remains the same) ...
       // 2. Fetch local bundles for comparison
       final localBundles = await _databaseHelper.getActiveLocalBundles();
       final localBundlesMap = {for (var b in localBundles) b['bundleNo']: b};
