@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/data_provider.dart';
+import '../../api/api_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -51,6 +51,35 @@ class ProfileScreen extends StatelessWidget {
                     leading: const Icon(Icons.email),
                     title: const Text('Username'),
                     subtitle: Text(user.email),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 10),
+                  child: ListTile(
+                    leading: const Icon(Icons.location_on),
+                    title: const Text('Location'),
+                    subtitle: FutureBuilder<String>(
+                      future: ApiService().getUserLocation(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Text('Loading...');
+                        } else if (snapshot.hasError) {
+                          return Text('Error: ${snapshot.error}');
+                        } else {
+                          final location = snapshot.data ?? 'Unknown';
+                          if (location.toLowerCase() == 'ahilyanagar') {
+                            return const Text('Ahilyanagar');
+                          } else if (location.toLowerCase() ==
+                              'chhatrapati-sambhajinagar') {
+                            return const Text('Chhatrapati-Sambhajinagar');
+                          } else {
+                            return Text(location);
+                          }
+                        }
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),

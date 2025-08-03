@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/data_provider.dart';
+import '../../api/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,18 +26,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Add this method to get user's district
   void _loadUserDistrict() async {
-    final dataProvider = Provider.of<DataProvider>(context, listen: false);
     try {
-      // Replace this with your actual function call to get user's district
-      final district = await dataProvider.getUserLocation();
-      setState(() {
-        _userDistrict = district;
-      });
-      // Automatically select this district in the provider
-      dataProvider.selectDistrict(district);
+      String location = await ApiService().getUserLocation();
+      if (location == "ahilyanagar") {
+        _userDistrict = "Ahilyanagar";
+      } else if (location == "chhatrapati-sambhajinagar") {
+        _userDistrict = "Chhatrapati-Sambhajinagar";
+      } else {
+        _userDistrict = location;
+      }
     } catch (e) {
-      // Handle error if needed
-      print('Error loading user district: $e');
+      print('Error fetching user district: $e');
+      _userDistrict = 'Unknown District'; // Fallback value
     }
   }
 

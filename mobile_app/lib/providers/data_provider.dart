@@ -317,44 +317,6 @@ class DataProvider with ChangeNotifier {
     }
   }
 
-  Future<String?> getUserLocation() async {
-    try {
-      // First, check the temporary records
-      final tempRecords = await _databaseHelper.getRecordsToSync();
-      if (tempRecords.isNotEmpty) {
-        final location = tempRecords.first['Location'];
-        if (location != null) {
-          return location.toString();
-        }
-      }
-
-      // If no temporary records, check the raw records
-      final allRecords = await _databaseHelper.getAllRawRecords();
-      if (allRecords.isNotEmpty) {
-        for (var record in allRecords) {
-          final recordData =
-              json.decode(record['data'] as String) as Map<String, dynamic>;
-          final location = recordData['Location'];
-          if (location != null) {
-            return location.toString();
-          }
-        }
-        final recordData = json.decode(allRecords.first['data'] as String)
-            as Map<String, dynamic>;
-        final location = recordData['Location'];
-        if (location != null) {
-          return location.toString();
-        }
-      }
-
-      // If no records are found in either table, return null
-      return null;
-    } catch (e) {
-      print('Error getting user\'s location: $e');
-      return null;
-    }
-  }
-
   // Method to update bundle status
   Future<void> updateBundleStatus(int bundleNo, String status) async {
     try {
@@ -500,7 +462,7 @@ class DataProvider with ChangeNotifier {
       for (final record in allRecords) {
         final recordData =
             json.decode(record['data'] as String) as Map<String, dynamic>;
-        final uniqueId = recordData['Unique ID']?.toString();
+        final uniqueId = recordData['UniqueId']?.toString();
 
         if (uniqueId != null && pattern.hasMatch(uniqueId)) {
           // Extract sequence number from existing ID
@@ -516,7 +478,7 @@ class DataProvider with ChangeNotifier {
 
       // Check records in records_to_sync table
       for (final record in tempRecords) {
-        final uniqueId = record['Unique ID']?.toString();
+        final uniqueId = record['UniqueId']?.toString();
 
         if (uniqueId != null && pattern.hasMatch(uniqueId)) {
           // Extract sequence number from existing ID
@@ -560,11 +522,13 @@ class DataProvider with ChangeNotifier {
   // Save record to temporary sync table
   Future<bool> saveRecordToSync(Map<String, dynamic> record) async {
     try {
-      final success = await _databaseHelper.saveRecordToSync(record);
-      if (success) {
+      final success_temp = await _databaseHelper.saveRecordToSync(record);
+      final success_permanent = await _databaseHelper.updateRecordWithUniqueId(
+          record['Search from'], record['UniqueId'] ?? record['UniqueId']);
+      if (success_temp && success_permanent) {
         notifyListeners();
       }
-      return success;
+      return success_temp && success_permanent;
     } catch (e) {
       print('Error saving record to sync: $e');
       return false;

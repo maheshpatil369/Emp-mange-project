@@ -49,8 +49,8 @@ class _DataScreenState extends State<DataScreen> {
 
   // Check if record has a unique ID (either just generated or previously existing)
   bool _hasUniqueId(Map<String, dynamic> record) {
-    return record['Unique ID'] != null &&
-        record['Unique ID'].toString().isNotEmpty;
+    return record['UniqueId'] != null &&
+        record['UniqueId'].toString().isNotEmpty;
   }
 
   //Method to check if records are already downloaded
@@ -61,7 +61,7 @@ class _DataScreenState extends State<DataScreen> {
 
   bool _isNotInTempRecords(Map<String, dynamic> record) {
     return _tempRecords.every((tempRecord) =>
-        tempRecord['Unique ID'] != record['Unique ID'] &&
+        tempRecord['UniqueId'] != record['UniqueId'] &&
         tempRecord['Search from'] != record['Search from']);
   }
 
@@ -246,7 +246,7 @@ class _DataScreenState extends State<DataScreen> {
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                   subtitle: Text(
-                                    'ID: ${record['Unique ID'] ?? 'N/A'}',
+                                    'ID: ${record['UniqueId'] ?? 'N/A'}',
                                     style: const TextStyle(fontSize: 10),
                                   ),
                                 );
@@ -694,7 +694,7 @@ class _DataScreenState extends State<DataScreen> {
   Widget _buildRecordDetails() {
     final record = _selectedRecord!;
     final fields = [
-      {'label': 'Unique ID', 'key': 'Unique ID'},
+      {'label': 'UniqueId', 'key': 'UniqueId'},
       {'label': 'Correction Details', 'key': 'Correction Details'},
       {'label': 'Crop Name', 'key': 'Crop Name'},
       {'label': 'Farmer Name', 'key': 'Farmer Name'},
@@ -709,7 +709,7 @@ class _DataScreenState extends State<DataScreen> {
         final value = record[field['key']]?.toString() ?? 'N/A';
         final isSearchFrom = field['key'] == 'Search from';
         final isPdfRequired = field['key'] == 'PDF Required';
-        final isUniqueId = field['key'] == 'Unique ID';
+        final isUniqueId = field['key'] == 'UniqueId';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
@@ -792,7 +792,7 @@ class _DataScreenState extends State<DataScreen> {
                             // Add the generated unique ID to the selected record
                             _selectedRecord =
                                 Map<String, dynamic>.from(_selectedRecord!)
-                                  ..['Unique ID'] = uniqueId;
+                                  ..['UniqueId'] = uniqueId;
                           });
 
                           ScaffoldMessenger.of(context).showSnackBar(

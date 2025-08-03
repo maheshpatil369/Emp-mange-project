@@ -199,4 +199,23 @@ class ApiService {
       rethrow;
     }
   }
+
+  Future<String> getUserLocation() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/users/me'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body)['location'] as String;
+      } else {
+        throw Exception('Failed to fetch user location: ${response.body}');
+      }
+    } catch (e) {
+      print('Exception during getUserLocation: $e');
+      rethrow;
+    }
+  }
 }
