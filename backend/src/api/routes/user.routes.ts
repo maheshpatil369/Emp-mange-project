@@ -4,6 +4,7 @@ import {
   createUser,
   updateUser,
   deleteUser,
+  getMe,
 } from "../controllers/user.controller";
 import { isAuthenticated, isAdmin } from "../middleware/auth.middleware";
 
@@ -12,6 +13,7 @@ const router = Router();
 // GET /api/users
 // Gets a list of all users.
 router.get("/", isAuthenticated, isAdmin, getAllUsers);
+router.get("/me", isAuthenticated, isAdmin, getMe);
 
 // POST /api/users
 // Creates a new user.
