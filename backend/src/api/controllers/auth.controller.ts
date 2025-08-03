@@ -72,7 +72,7 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
         const idToken = await user.getIdToken();
 
         return res.status(200).json({
-            message: 'Login successful.',
+            message: 'Login successful. user.uid: ' + user.uid + ' user.email: ' + user.email,
             token: idToken,
             user: {
                 uid: user.uid,

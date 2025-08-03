@@ -63,7 +63,7 @@ class AuthProvider with ChangeNotifier {
     print('Attempting login for: $email'); // Debugging print
 
     try {
-      final token = await _apiService.login(email, password);
+      final token = await _apiService.login(email + "@yourapp.com", password);
 
       // Verify token is not empty
       if (token.isEmpty) {

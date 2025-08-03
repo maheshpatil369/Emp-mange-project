@@ -383,6 +383,50 @@ class DatabaseHelper {
     }
   }
 
+  Future<bool> checkIfAnyRecordExists(
+      List<Map<String, dynamic>> records) async {
+    if (records.isEmpty) {
+      return false;
+    }
+
+    final db = await database;
+    try {
+      // Get all existing records from the local database
+      final List<Map<String, dynamic>> localRecords = await getAllRawRecords();
+      final Set<String> localSearchFromValues = {};
+
+      // Populate a set with "Search from" values from local records for quick lookup
+      for (var localRecordJson in localRecords) {
+        final localRecord = json.decode(localRecordJson['data'] as String)
+            as Map<String, dynamic>;
+        final searchFromValue = localRecord['Search from'] ??
+            localRecord['Search From'] ??
+            localRecord['search from'];
+        if (searchFromValue != null) {
+          localSearchFromValues.add(searchFromValue.toString());
+        }
+      }
+
+      // Check if any of the incoming records' "Search from" values exist in the local set
+      for (var incomingRecord in records) {
+        final searchFromValue = incomingRecord['Search from'] ??
+            incomingRecord['Search From'] ??
+            incomingRecord['search from'];
+        if (searchFromValue != null &&
+            localSearchFromValues.contains(searchFromValue.toString())) {
+          print(
+              'Found a duplicate record with "Search from": $searchFromValue');
+          return true; // Found a duplicate, so the batch is considered already downloaded
+        }
+      }
+      return false; // No duplicates found in the incoming batch
+    } catch (e) {
+      print('Error checking for existing records: $e');
+      // In case of error, assume no duplicates to allow download, or handle as per desired error policy
+      return false;
+    }
+  }
+
   // Create records_to_sync table
   Future<void> _createRecordsToSyncTable(Database db) async {
     await db.execute('''
@@ -492,7 +536,7 @@ class DatabaseHelper {
             as Map<String, dynamic>;
 
         // Add the unique ID
-        existingData['Unique ID'] = uniqueId;
+        existingData['UniqueID'] = uniqueId;
 
         // Update the record
         await db.update(

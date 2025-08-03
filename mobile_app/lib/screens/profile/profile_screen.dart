@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/data_provider.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -48,7 +49,7 @@ class ProfileScreen extends StatelessWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 10),
                   child: ListTile(
                     leading: const Icon(Icons.email),
-                    title: const Text('Email'),
+                    title: const Text('Username'),
                     subtitle: Text(user.email),
                   ),
                 ),

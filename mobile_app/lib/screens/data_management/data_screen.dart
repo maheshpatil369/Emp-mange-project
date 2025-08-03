@@ -53,6 +53,12 @@ class _DataScreenState extends State<DataScreen> {
         record['Unique ID'].toString().isNotEmpty;
   }
 
+  //Method to check if records are already downloaded
+  bool get _alreadyDownloaded {
+    final dataProvider = Provider.of<DataProvider>(context, listen: false);
+    return false;
+  }
+
   bool _isNotInTempRecords(Map<String, dynamic> record) {
     return _tempRecords.every((tempRecord) =>
         tempRecord['Unique ID'] != record['Unique ID'] &&
@@ -278,17 +284,26 @@ class _DataScreenState extends State<DataScreen> {
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
                             ),
-                            onPressed: () async {
-                              final provider = Provider.of<DataProvider>(
-                                  context,
-                                  listen: false);
-                              await provider.downloadAndStoreAssignedRecords();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text(
-                                        'Records downloaded and stored locally!')),
-                              );
-                            },
+                            onPressed: _alreadyDownloaded
+                                ? () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              'Records are already downloaded')),
+                                    );
+                                  }
+                                : () async {
+                                    final provider = Provider.of<DataProvider>(
+                                        context,
+                                        listen: false);
+                                    await provider
+                                        .downloadAndStoreAssignedRecords();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              'Records downloaded and stored locally!')),
+                                    );
+                                  },
                           ),
                           const SizedBox(width: 12), // spacing between buttons
                           ElevatedButton.icon(

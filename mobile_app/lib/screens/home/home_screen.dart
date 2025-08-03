@@ -11,15 +11,33 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String? _selectedDistrictSlug;
   String? _selectedTaluka;
+  String? _userDistrict; // Store user's district
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<DataProvider>(context, listen: false).loadConfig();
+      _loadUserDistrict(); // Load user's district
     });
+  }
+
+  // Add this method to get user's district
+  void _loadUserDistrict() async {
+    final dataProvider = Provider.of<DataProvider>(context, listen: false);
+    try {
+      // Replace this with your actual function call to get user's district
+      final district = await dataProvider.getUserLocation();
+      setState(() {
+        _userDistrict = district;
+      });
+      // Automatically select this district in the provider
+      dataProvider.selectDistrict(district);
+    } catch (e) {
+      // Handle error if needed
+      print('Error loading user district: $e');
+    }
   }
 
   void _assignBundle() async {
@@ -32,14 +50,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final dataProvider = Provider.of<DataProvider>(context, listen: false);
     try {
-      await dataProvider.assignWorkBundle(_selectedTaluka!);
+      final result = await dataProvider.assignWorkBundle(_selectedTaluka!);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Work bundle assigned successfully!')),
+        SnackBar(content: Text(result ?? "No message returned from API.")),
       );
       setState(() {
-        _selectedDistrictSlug = null;
         _selectedTaluka = null;
-        dataProvider.selectDistrict(null); // Also reset provider state
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -79,33 +95,29 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 20),
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    value: _selectedDistrictSlug,
-                    hint: const Text('Select District'),
-                    // UPDATED: Items are now maps of {name, slug}
-                    items: dataProvider.districts.map((district) {
-                      return DropdownMenuItem(
-                        value: district['slug'], // The value is the slug
-                        child:
-                            Text(district['name']!), // The display is the name
-                      );
-                    }).toList(),
-                    onChanged: (newSlug) {
-                      setState(() {
-                        _selectedDistrictSlug = newSlug;
-                        _selectedTaluka = null;
-                      });
-                      // UPDATED: Tell the provider about the change
-                      dataProvider.selectDistrict(newSlug);
-                    },
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'District',
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+
+                  // Display user's district instead of dropdown
+                  Container(
+                    padding: const EdgeInsets.all(16.0),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(4.0),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on, color: Colors.green),
+                        const SizedBox(width: 8),
+                        Text(
+                          _userDistrict ?? 'Loading district...',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+
                   const SizedBox(height: 15),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
@@ -136,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: _assignBundle, // Remove conditional disabling
+                    onPressed: _assignBundle,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 15),
                     ),

@@ -213,7 +213,7 @@ class DataProvider with ChangeNotifier {
   }
 
   // Method to assign work bundle and store locally
-  Future<void> assignWorkBundle(String taluka) async {
+  Future<String> assignWorkBundle(String taluka) async {
     _isAssigningBundle = true;
     _errorMessage = null;
     notifyListeners();
@@ -227,6 +227,12 @@ class DataProvider with ChangeNotifier {
         throw Exception('Taluka cannot be empty');
       }
 
+      // Check if a bundle for this taluka already exists
+      if (await _apiService
+          .fetchActiveBundles()
+          .then((bundles) => bundles.containsKey(cleanTaluka))) {
+        return ('Bundle already exists for this taluka');
+      }
       // Call API to assign bundle
       final bundleResponse = await _apiService.assignBundle(cleanTaluka);
 
@@ -236,15 +242,15 @@ class DataProvider with ChangeNotifier {
         'taluka': cleanTaluka,
         'status': 'active'
       };
-      print("MNPK");
       // Store bundle in local db
       await _databaseHelper.insertBundle(bundleData);
-      print("MNPK12");
       _errorMessage = null;
       print('Bundle assigned and stored successfully for $cleanTaluka');
+      return 'Bundle assigned successfully for $cleanTaluka';
     } catch (e) {
       _errorMessage = 'Failed to assign bundle: ${e.toString()}';
       print(_errorMessage);
+      return _errorMessage.toString();
     } finally {
       _isAssigningBundle = false;
       notifyListeners();
@@ -289,14 +295,63 @@ class DataProvider with ChangeNotifier {
     }
   }
 
-  Future<void> downloadAndStoreAssignedRecords() async {
+  Future<String> downloadAndStoreAssignedRecords() async {
     try {
       final records = await _apiService.fetchAssignedFile();
+
+      if (records.isEmpty) {
+        return 'No records to download from server.';
+      }
+
+      // NEW LOGIC: Check if any of the fetched records already exist locally
+      if (await _databaseHelper.checkIfAnyRecordExists(records)) {
+        return 'Records are already downloaded (batch detected as duplicate).';
+      }
+
       await _databaseHelper.insertRawRecords(records);
-      print('Downloaded and stored ${records.length} records from server.');
       notifyListeners();
+      return 'Records downloaded and stored locally!';
     } catch (e) {
       print('Error downloading/storing assigned records: $e');
+      return 'Failed to download records: ${e.toString()}';
+    }
+  }
+
+  Future<String?> getUserLocation() async {
+    try {
+      // First, check the temporary records
+      final tempRecords = await _databaseHelper.getRecordsToSync();
+      if (tempRecords.isNotEmpty) {
+        final location = tempRecords.first['Location'];
+        if (location != null) {
+          return location.toString();
+        }
+      }
+
+      // If no temporary records, check the raw records
+      final allRecords = await _databaseHelper.getAllRawRecords();
+      if (allRecords.isNotEmpty) {
+        for (var record in allRecords) {
+          final recordData =
+              json.decode(record['data'] as String) as Map<String, dynamic>;
+          final location = recordData['Location'];
+          if (location != null) {
+            return location.toString();
+          }
+        }
+        final recordData = json.decode(allRecords.first['data'] as String)
+            as Map<String, dynamic>;
+        final location = recordData['Location'];
+        if (location != null) {
+          return location.toString();
+        }
+      }
+
+      // If no records are found in either table, return null
+      return null;
+    } catch (e) {
+      print('Error getting user\'s location: $e');
+      return null;
     }
   }
 
