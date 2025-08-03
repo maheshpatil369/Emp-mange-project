@@ -461,13 +461,13 @@ class DataProvider with ChangeNotifier {
       print('Generated unique ID: $uniqueId for taluka: $talukaName');
 
       // Store the unique ID in permanent storage
-      final searchFromValue = record['Search from'] ??
-          record['Search From'] ??
-          record['search from'];
-      if (searchFromValue != null) {
-        await _databaseHelper.updateRecordWithUniqueId(
-            searchFromValue.toString(), uniqueId);
-      }
+      // final searchFromValue = record['Search from'] ??
+      //     record['Search From'] ??
+      //     record['search from'];
+      // if (searchFromValue != null) {
+      //   await _databaseHelper.updateRecordWithUniqueId(
+      //       searchFromValue.toString(), uniqueId);
+      // }
 
       return uniqueId;
     } catch (e) {

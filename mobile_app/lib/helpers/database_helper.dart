@@ -536,7 +536,7 @@ class DatabaseHelper {
             as Map<String, dynamic>;
 
         // Add the unique ID
-        existingData['UniqueID'] = uniqueId;
+        existingData['UniqueId'] = uniqueId;
 
         // Update the record
         await db.update(
