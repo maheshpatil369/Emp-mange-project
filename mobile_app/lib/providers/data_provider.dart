@@ -377,37 +377,37 @@ class DataProvider with ChangeNotifier {
 
   // Hardcoded mappings for location and taluka abbreviations
   static const Map<String, String> _locationAbbreviations = {
-    'ahilyanagar': 'An',
-    'chhatrapati-sambhajinagar': 'Cs',
+    'ahilyanagar': 'AN',
+    'chhatrapati-sambhajinagar': 'CS',
   };
 
   static const Map<String, String> _talukaAbbreviations = {
     // Ahilyanagar talukas
-    'Ahmednagar': 'Ah',
-    'Jamkhed': 'Ja',
-    'Karjat': 'Ka',
-    'Kopargaon': 'Ko',
-    'Nevasa': 'Ne',
-    'Parner': 'Pa',
-    'Pathardi': 'Pt',
-    'Rahata': 'Ra',
-    'Rahuri': 'Rh',
-    'Sangamner': 'Sa',
-    'Shevgaon': 'Sh',
-    'Shirdi': 'Si',
-    'Shrigonda': 'Sr',
-    'Akole': 'Ak',
+    'Ahmednagar': 'AH',
+    'Jamkhed': 'JA',
+    'Karjat': 'KA',
+    'Kopargaon': 'KO',
+    'Nevasa': 'NE',
+    'Parner': 'PA',
+    'Pathardi': 'PT',
+    'Rahata': 'RA',
+    'Rahuri': 'RH',
+    'Sangamner': 'SA',
+    'Shevgaon': 'SH',
+    'Shirdi': 'SI',
+    'Shrigonda': 'SR',
+    'Akole': 'AK',
 
     // Chhatrapati Sambhajinagar talukas
-    'Aurangabad': 'Au',
-    'Gangapur': 'Ga',
-    'Kannad': 'Kn',
-    'Khultabad': 'Kh',
-    'Paithan': 'Pa',
-    'Sillod': 'Si',
-    'Vaijapur': 'Va',
-    'Phulambri': 'Ph',
-    'Soegaon': 'So',
+    'Aurangabad': 'AU',
+    'Gangapur': 'GA',
+    'Kannad': 'KN',
+    'Khultabad': 'KH',
+    'Paithan': 'PA',
+    'Sillod': 'SI',
+    'Vaijapur': 'VA',
+    'Phulambri': 'PH',
+    'Soegaon': 'SO',
   };
 
   Future<void> incrementBundleCount(String taluka) async {

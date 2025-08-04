@@ -414,6 +414,11 @@ class _DataScreenState extends State<DataScreen> {
                                           await provider.syncRecordsToServer();
 
                                       if (success) {
+                                        final dataProvider =
+                                            Provider.of<DataProvider>(context,
+                                                listen: false);
+                                        await dataProvider.incrementBundleCount(
+                                            _selectedRecord!['taluka']);
                                         final recordCount = _tempRecords.length;
                                         setState(() {
                                           _tempRecords = [];
@@ -925,10 +930,6 @@ class _DataScreenState extends State<DataScreen> {
 
                       if (success) {
                         await _loadTempRecords(); // Refresh temp records list
-                        final dataProvider =
-                            Provider.of<DataProvider>(context, listen: false);
-                        await dataProvider
-                            .incrementBundleCount(_selectedRecord!['taluka']);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Record saved to temporary storage!'),
