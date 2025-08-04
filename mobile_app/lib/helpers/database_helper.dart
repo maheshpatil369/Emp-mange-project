@@ -252,13 +252,33 @@ class DatabaseHelper {
     final db = await database;
     final bundleNo = bundleData['bundleNo'];
 
+    // Get current local bundle to preserve count
+    final currentBundle = await db.query(
+      'bundles',
+      where: 'bundleNo = ?',
+      whereArgs: [bundleNo],
+      limit: 1,
+    );
+
     // Only update the fields that exist in the table and are present in the response.
     final Map<String, dynamic> updateFields = {};
+
     if (bundleData.containsKey('taluka')) {
       updateFields['taluka'] = bundleData['taluka'];
     }
-    if (bundleData.containsKey('count')) {
-      updateFields['count'] = bundleData['count'];
+
+    // Preserve local count if it exists, otherwise use server count
+    if (currentBundle.isNotEmpty && currentBundle.first['count'] != null) {
+      updateFields['count'] = currentBundle.first['count']; // Keep local count
+      print(
+          'Preserving local count: ${currentBundle.first['count']} for bundle $bundleNo');
+    } else if (bundleData.containsKey('count')) {
+      updateFields['count'] =
+          bundleData['count']; // Use server count if no local count
+    }
+
+    if (bundleData.containsKey('status')) {
+      updateFields['status'] = bundleData['status'];
     }
 
     // Ensure there are fields to update before calling the database.
@@ -267,12 +287,15 @@ class DatabaseHelper {
       return 0;
     }
 
-    return await db.update(
+    final result = await db.update(
       'bundles',
       updateFields,
       where: 'bundleNo = ?',
       whereArgs: [bundleNo],
     );
+
+    print("Updated bundle $bundleNo with fields: $updateFields");
+    return result;
   }
 
   Future<void> insertRawRecords(List<Map<String, dynamic>> records) async {
@@ -299,10 +322,19 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getActiveLocalBundles() async {
     try {
       final db = await database;
-      final List<Map<String, dynamic>> bundles =
-          await db.query('bundles', where: 'status = ?', whereArgs: ['active']);
+      final List<Map<String, dynamic>> bundles = await db.query('bundles',
+          where: 'status = ?',
+          whereArgs: ['active'],
+          orderBy: 'bundleNo ASC' // Add ordering for consistency
+          );
 
-      print("Fetched ${bundles.length} active bundles");
+      print(
+          "Fetched ${bundles.length} active bundles with current counts:"); // DEBUG
+      for (var bundle in bundles) {
+        print(
+            "Bundle ${bundle['bundleNo']}: Taluka=${bundle['taluka']}, Count=${bundle['count']}"); // DEBUG
+      }
+
       return bundles;
     } catch (e) {
       print('Error fetching active bundles: $e');

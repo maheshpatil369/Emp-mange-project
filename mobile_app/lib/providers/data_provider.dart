@@ -137,7 +137,11 @@ class DataProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Attempt to fetch from server
+      // 1. Always load local bundles first for immediate UI display
+      _serverBundles = await _databaseHelper.getActiveLocalBundles();
+      notifyListeners(); // Show local data immediately
+
+      // 2. Try to sync with server in background
       final serverResponse = await _apiService.fetchActiveBundles().timeout(
         const Duration(seconds: 10),
         onTimeout: () {
@@ -147,8 +151,7 @@ class DataProvider with ChangeNotifier {
 
       // If response only contains a 'message', treat as no bundles
       if (serverResponse.containsKey('message') && serverResponse.length == 1) {
-        print('No active bundles for user.');
-        _serverBundles = [];
+        print('No active bundles for user on server.');
         _isOffline = false;
         _isLoadingBundles = false;
         notifyListeners();
@@ -159,61 +162,51 @@ class DataProvider with ChangeNotifier {
           .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
           .toList();
 
-      // 2. Fetch local bundles for comparison
+      // 3. Sync server data with local data (preserving local counts)
       final localBundles = await _databaseHelper.getActiveLocalBundles();
       final localBundlesMap = {for (var b in localBundles) b['bundleNo']: b};
       final serverBundlesMap = {
         for (var b in serverBundlesList) b['bundleNo']: b
       };
 
-      // 3. Determine bundles to add, update, or delete
+      // 4. Apply changes to the local database (but preserve local counts)
       final bundlesToUpdate = <Map<String, dynamic>>[];
       final bundlesToAdd = <Map<String, dynamic>>[];
-      final bundlesToDelete = <Map<String, dynamic>>[];
 
       // Check server bundles against local ones
       for (var serverBundle in serverBundlesList) {
-        print('Processing server bundle: ${serverBundle['bundleNo']}');
         final bundleNo = serverBundle['bundleNo'];
-        final bundleTaluka = serverBundle['taluka'] ?? '';
-        if (localBundlesMap.containsKey(bundleNo) &&
-            localBundlesMap[bundleNo] != null &&
-            localBundlesMap[bundleNo]?['taluka'] == bundleTaluka) {
-          bundlesToUpdate.add(serverBundle);
+        if (localBundlesMap.containsKey(bundleNo)) {
+          // Bundle exists locally - update but preserve local count
+          final localBundle = localBundlesMap[bundleNo]!;
+          final updatedBundle = Map<String, dynamic>.from(serverBundle);
+          updatedBundle['count'] = localBundle['count']; // Preserve local count
+          bundlesToUpdate.add(updatedBundle);
         } else {
+          // New bundle from server
           bundlesToAdd.add(serverBundle);
         }
       }
 
-      // Check local bundles against server ones
-      for (var localBundle in localBundles) {
-        final bundleNo = localBundle['bundleNo'];
-        if (!serverBundlesMap.containsKey(bundleNo)) {
-          bundlesToDelete.add(localBundle);
-        }
-      }
-
-      // 4. Apply changes to the local database
+      // Apply changes
       for (var bundle in bundlesToAdd) {
         await _databaseHelper.insertBundle(bundle);
       }
       for (var bundle in bundlesToUpdate) {
         await _databaseHelper.updateBundle(bundle);
       }
-      for (var bundle in bundlesToDelete) {
-        await _databaseHelper.updateBundleStatus(bundle['bundleNo'], 'deleted');
-      }
 
-      // 5. Refresh local state from the database and notify listeners
+      // 5. Refresh local state and show updated data
       _serverBundles = await _databaseHelper.getActiveLocalBundles();
       _isOffline = false;
-      print('Successfully synced bundles with server.');
+      print(
+          'Successfully synced bundles with server while preserving local counts.');
     } catch (e) {
       _errorMessage =
-          'Failed to sync with server. Loading local data: ${e.toString()}';
-      print('Error fetching from server, loading from local DB: $e');
+          'Failed to sync with server. Showing local data: ${e.toString()}';
+      print('Error syncing with server, using local data: $e');
       _isOffline = true;
-      // Fallback: load bundles from the local database
+      // Use local data as fallback
       _serverBundles = await _databaseHelper.getActiveLocalBundles();
     } finally {
       _isLoadingBundles = false;
@@ -297,6 +290,16 @@ class DataProvider with ChangeNotifier {
   //   }
   // }
 
+  Future<void> refreshLocalBundles() async {
+    try {
+      _serverBundles = await _databaseHelper.getActiveLocalBundles();
+      notifyListeners();
+      print('Local bundles refreshed for UI display');
+    } catch (e) {
+      print('Error refreshing local bundles: $e');
+    }
+  }
+
   //number of records in the device locally
   Future<int> getLocalRecordCount() async {
     try {
@@ -325,6 +328,8 @@ class DataProvider with ChangeNotifier {
   Future<String> downloadAndStoreAssignedRecords() async {
     try {
       final records = await _apiService.fetchAssignedFile();
+      print('Fetched ${records.length} records from server.');
+      print(" Records: ${records[0]}");
 
       if (records.isEmpty) {
         return 'No records to download from server.';
@@ -484,24 +489,24 @@ class DataProvider with ChangeNotifier {
   }
 
   // Get next sequence number for a specific taluka
-  Future<int> _getNextSequenceNumber(String taluka) async {
-    final db = await _databaseHelper.database;
-    final result = await db.query(
-      'bundles',
-      where: 'taluka = ?',
-      whereArgs: [taluka],
-      limit: 1,
-    );
-    if (result.isNotEmpty) {
-      final bundle = result.first;
-      final bundleNo = (bundle['bundleNo'] ?? 1) as int;
-      final count = (bundle['count'] ?? 0) as int;
-      // Sequence number logic: (bundleNo - 1) * 250 + count
-      return (bundleNo - 1) * 250 + count;
-    } else {
-      throw Exception('No bundle found for taluka: $taluka');
-    }
-  }
+  // Future<int> _getNextSequenceNumber(String taluka) async {
+  //   final db = await _databaseHelper.database;
+  //   final result = await db.query(
+  //     'bundles',
+  //     where: 'taluka = ?',
+  //     whereArgs: [taluka],
+  //     limit: 1,
+  //   );
+  //   if (result.isNotEmpty) {
+  //     final bundle = result.first;
+  //     final bundleNo = (bundle['bundleNo'] ?? 1) as int;
+  //     final count = (bundle['count'] ?? 0) as int;
+  //     // Sequence number logic: (bundleNo - 1) * 250 + count
+  //     return (bundleNo - 1) * 250 + count;
+  //   } else {
+  //     throw Exception('No bundle found for taluka: $taluka');
+  //   }
+  // }
 
 // New method that gets sequence and increments count
   Future<int> _getNextSequenceNumberAndIncrement(String taluka) async {
@@ -518,23 +523,27 @@ class DataProvider with ChangeNotifier {
       final bundleNo = (bundle['bundleNo'] ?? 1) as int;
       final currentCount = (bundle['count'] ?? 0) as int;
 
+      print(
+          'BEFORE INCREMENT: Bundle $bundleNo, Taluka: $taluka, Count: $currentCount');
+
       // Calculate sequence number
       final sequenceNumber = (bundleNo - 1) * 250 + currentCount;
 
-      // Increment count immediately
-      await db.update(
+      // Increment count immediately in local database
+      final updateResult = await db.update(
         'bundles',
         {'count': currentCount + 1},
         where: 'bundleNo = ? AND taluka = ?',
         whereArgs: [bundleNo, taluka],
       );
 
-      // Refresh the serverBundles list to reflect the change
-      _serverBundles = await _databaseHelper.getActiveLocalBundles();
+      print('Local count updated: $updateResult rows affected');
+
+      // Immediately refresh local bundles for UI
+      await refreshLocalBundles();
 
       print(
-          'Incremented count for taluka: $taluka, new count: ${currentCount + 1}');
-      notifyListeners(); // This will update the UI
+          'Incremented local count for taluka: $taluka, new count: ${currentCount + 1}');
 
       return sequenceNumber;
     } else {
