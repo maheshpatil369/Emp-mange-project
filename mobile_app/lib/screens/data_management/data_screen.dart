@@ -305,96 +305,96 @@ class _DataScreenState extends State<DataScreen> {
                                   },
                           ),
                           const SizedBox(width: 12), // spacing between buttons
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.delete_sweep),
-                            label: const Text('Empty Temp'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () async {
-                              // Show confirmation popup
-                              bool? confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (context) {
-                                  return AlertDialog(
-                                    title: const Text('Are you sure?'),
-                                    content: const Text(
-                                        'Do you want to empty the temporary table?'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, false), // No
-                                        child: const Text('No'),
-                                      ),
-                                      ElevatedButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, true), // Yes
-                                        style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red),
-                                        child: const Text('Yes'),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              );
+                          // ElevatedButton.icon(
+                          //   icon: const Icon(Icons.delete_sweep),
+                          //   label: const Text('Empty Temp'),
+                          //   style: ElevatedButton.styleFrom(
+                          //     backgroundColor: Colors.orange,
+                          //     foregroundColor: Colors.white,
+                          //   ),
+                          //   onPressed: () async {
+                          //     // Show confirmation popup
+                          //     bool? confirmed = await showDialog<bool>(
+                          //       context: context,
+                          //       builder: (context) {
+                          //         return AlertDialog(
+                          //           title: const Text('Are you sure?'),
+                          //           content: const Text(
+                          //               'Do you want to empty the temporary table?'),
+                          //           actions: [
+                          //             TextButton(
+                          //               onPressed: () =>
+                          //                   Navigator.pop(context, false), // No
+                          //               child: const Text('No'),
+                          //             ),
+                          //             ElevatedButton(
+                          //               onPressed: () =>
+                          //                   Navigator.pop(context, true), // Yes
+                          //               style: ElevatedButton.styleFrom(
+                          //                   backgroundColor: Colors.red),
+                          //               child: const Text('Yes'),
+                          //             ),
+                          //           ],
+                          //         );
+                          //       },
+                          //     );
 
-                              // If user confirms
-                              if (confirmed == true) {
-                                print('User confirmed! Running next logic...');
-                                if (_tempRecords.isNotEmpty) {
-                                  try {
-                                    final provider = Provider.of<DataProvider>(
-                                        context,
-                                        listen: false);
-                                    final success =
-                                        await provider.deleteAllLocalBundles();
-                                    if (success) {
-                                      setState(() {
-                                        _tempRecords = [];
-                                        _showTempRecords = false;
-                                      });
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                              'Temporary table emptied successfully!'),
-                                          backgroundColor: Colors.orange,
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                              'Failed to empty temporary table.'),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                            'Error emptying temp table: $e'),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          'No temporary records to delete.'),
-                                      backgroundColor: Colors.blue,
-                                    ),
-                                  );
-                                }
-                              } else {
-                                print('User cancelled the action.');
-                              }
-                            },
-                          ),
+                          //     // If user confirms
+                          //     if (confirmed == true) {
+                          //       print('User confirmed! Running next logic...');
+                          //       if (_tempRecords.isNotEmpty) {
+                          //         try {
+                          //           final provider = Provider.of<DataProvider>(
+                          //               context,
+                          //               listen: false);
+                          //           final success =
+                          //               await provider.deleteAllLocalBundles();
+                          //           if (success) {
+                          //             setState(() {
+                          //               _tempRecords = [];
+                          //               _showTempRecords = false;
+                          //             });
+                          //             ScaffoldMessenger.of(context)
+                          //                 .showSnackBar(
+                          //               const SnackBar(
+                          //                 content: Text(
+                          //                     'Temporary table emptied successfully!'),
+                          //                 backgroundColor: Colors.orange,
+                          //               ),
+                          //             );
+                          //           } else {
+                          //             ScaffoldMessenger.of(context)
+                          //                 .showSnackBar(
+                          //               const SnackBar(
+                          //                 content: Text(
+                          //                     'Failed to empty temporary table.'),
+                          //                 backgroundColor: Colors.red,
+                          //               ),
+                          //             );
+                          //           }
+                          //         } catch (e) {
+                          //           ScaffoldMessenger.of(context).showSnackBar(
+                          //             SnackBar(
+                          //               content: Text(
+                          //                   'Error emptying temp table: $e'),
+                          //               backgroundColor: Colors.red,
+                          //             ),
+                          //           );
+                          //         }
+                          //       } else {
+                          //         ScaffoldMessenger.of(context).showSnackBar(
+                          //           const SnackBar(
+                          //             content: Text(
+                          //                 'No temporary records to delete.'),
+                          //             backgroundColor: Colors.blue,
+                          //           ),
+                          //         );
+                          //       }
+                          //     } else {
+                          //       print('User cancelled the action.');
+                          //     }
+                          //   },
+                          // ),
                           const SizedBox(width: 12), // spacing between buttons
                           ElevatedButton.icon(
                             icon: const Icon(Icons.sync),
