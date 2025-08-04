@@ -349,7 +349,6 @@ class _DataScreenState extends State<DataScreen> {
                           //               listen: false);
                           //           final success =
                           //               await provider.emptyTempTable();
-
                           //           if (success) {
                           //             setState(() {
                           //               _tempRecords = [];
@@ -987,7 +986,6 @@ class _DataScreenState extends State<DataScreen> {
                     try {
                       final provider =
                           Provider.of<DataProvider>(context, listen: false);
-
                       // Check if bundle is available for this taluka
                       final taluka = _selectedRecord!['Taluka'];
                       final bundle = provider.serverBundles.firstWhere(

@@ -110,7 +110,8 @@ class DatabaseHelper {
           bundleNo INTEGER,
           taluka TEXT,
           assignedAt TEXT,
-          status TEXT DEFAULT 'active'
+          status TEXT DEFAULT 'active',
+          count INTEGER DEFAULT 0
         )
       ''');
       print('Bundles table created during upgrade');
@@ -548,6 +549,23 @@ class DatabaseHelper {
       print('Error clearing records to sync: $e');
     }
   }
+
+  // Get bundles for specific user
+  // Future<List<Map<String, dynamic>>> getBundlesForUser(String userId) async {
+  //   try {
+  //     final db = await database;
+  //     final List<Map<String, dynamic>> bundles = await db.query(
+  //       'bundles',
+  //       where: 'user_id = ? AND status = ?',
+  //       whereArgs: [userId, 'active'],
+  //       orderBy: 'bundleNo ASC',
+  //     );
+  //     return bundles;
+  //   } catch (e) {
+  //     print('Error fetching bundles for user: $e');
+  //     return [];
+  //   }
+  // }
 
   // Update record in raw_records table with unique ID
   Future<bool> updateRecordWithUniqueId(

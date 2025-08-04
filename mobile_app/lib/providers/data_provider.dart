@@ -2,7 +2,7 @@
 // import 'dart:nativewrappers/_internal/vm/lib/internal_patch.dart';
 
 import 'dart:async';
-import 'dart:convert';
+// import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../api/api_service.dart';
 import '../helpers/database_helper.dart';
@@ -10,7 +10,7 @@ import '../models/member_model.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:shared_preferences/shared_preferences.dart';
 
 class DataProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -440,30 +440,39 @@ class DataProvider with ChangeNotifier {
   }
 
   Future<void> incrementBundleCount(String taluka) async {
-    try {
-      // Get the bundle for the given taluka
-      final db = await _databaseHelper.database;
-      final result = await db.query(
+    final db = await _databaseHelper.database;
+    final result = await db.query(
+      'bundles',
+      where: 'taluka = ? AND status = ?',
+      whereArgs: [taluka, 'active'],
+      limit: 1,
+    );
+
+    if (result.isNotEmpty) {
+      final bundle = result.first;
+      final bundleNo = (bundle['bundleNo'] ?? 1) as int;
+      final currentCount = (bundle['count'] ?? 0) as int;
+
+      print(
+          'BEFORE INCREMENT: Bundle $bundleNo, Taluka: $taluka, Count: $currentCount');
+
+      // Increment count immediately in local database
+      final updateResult = await db.update(
         'bundles',
-        where: 'taluka = ?',
-        whereArgs: [taluka],
-        limit: 1,
+        {'count': currentCount + 1},
+        where: 'bundleNo = ? AND taluka = ?',
+        whereArgs: [bundleNo, taluka],
       );
-      if (result.isNotEmpty) {
-        final bundle = result.first;
-        final newCount = ((bundle['count'] ?? 0) as int) + 1;
-        await db.update(
-          'bundles',
-          {'count': newCount},
-          where: 'bundleNo = ? AND taluka = ?',
-          whereArgs: [bundle['bundleNo'], taluka],
-        );
-        print(
-            'Bundle count incremented for taluka: $taluka, new count: $newCount');
-        notifyListeners();
-      }
-    } catch (e) {
-      print('Error incrementing bundle count: $e');
+
+      print('Local count updated: $updateResult rows affected');
+
+      // Immediately refresh local bundles for UI
+      await refreshLocalBundles();
+
+      print(
+          'Incremented local count for taluka: $taluka, new count: ${currentCount + 1}');
+    } else {
+      throw Exception('No active bundle found for taluka: $taluka');
     }
   }
 
@@ -500,7 +509,7 @@ class DataProvider with ChangeNotifier {
       }
 
       // Get current sequence and increment count immediately
-      final nextSequence = await _getNextSequenceNumberAndIncrement(talukaName);
+      final nextSequence = await _getNextSequenceNumber(talukaName);
 
       final uniqueId = '$locationAbbr$talukaAbbr$nextSequence';
       print('Generated unique ID: $uniqueId for taluka: $talukaName');
@@ -513,67 +522,67 @@ class DataProvider with ChangeNotifier {
   }
 
   // Get next sequence number for a specific taluka
-  // Future<int> _getNextSequenceNumber(String taluka) async {
-  //   final db = await _databaseHelper.database;
-  //   final result = await db.query(
-  //     'bundles',
-  //     where: 'taluka = ?',
-  //     whereArgs: [taluka],
-  //     limit: 1,
-  //   );
-  //   if (result.isNotEmpty) {
-  //     final bundle = result.first;
-  //     final bundleNo = (bundle['bundleNo'] ?? 1) as int;
-  //     final count = (bundle['count'] ?? 0) as int;
-  //     // Sequence number logic: (bundleNo - 1) * 250 + count
-  //     return (bundleNo - 1) * 250 + count;
-  //   } else {
-  //     throw Exception('No bundle found for taluka: $taluka');
-  //   }
-  // }
-
-// New method that gets sequence and increments count
-  Future<int> _getNextSequenceNumberAndIncrement(String taluka) async {
+  Future<int> _getNextSequenceNumber(String taluka) async {
     final db = await _databaseHelper.database;
     final result = await db.query(
       'bundles',
-      where: 'taluka = ? AND status = ?',
-      whereArgs: [taluka, 'active'],
+      where: 'taluka = ?',
+      whereArgs: [taluka],
       limit: 1,
     );
-
     if (result.isNotEmpty) {
       final bundle = result.first;
       final bundleNo = (bundle['bundleNo'] ?? 1) as int;
-      final currentCount = (bundle['count'] ?? 0) as int;
-
-      print(
-          'BEFORE INCREMENT: Bundle $bundleNo, Taluka: $taluka, Count: $currentCount');
-
-      // Calculate sequence number
-      final sequenceNumber = (bundleNo - 1) * 250 + currentCount;
-
-      // Increment count immediately in local database
-      final updateResult = await db.update(
-        'bundles',
-        {'count': currentCount + 1},
-        where: 'bundleNo = ? AND taluka = ?',
-        whereArgs: [bundleNo, taluka],
-      );
-
-      print('Local count updated: $updateResult rows affected');
-
-      // Immediately refresh local bundles for UI
-      await refreshLocalBundles();
-
-      print(
-          'Incremented local count for taluka: $taluka, new count: ${currentCount + 1}');
-
-      return sequenceNumber;
+      final count = (bundle['count'] ?? 0) as int;
+      // Sequence number logic: (bundleNo - 1) * 250 + count
+      return (bundleNo - 1) * 250 + count;
     } else {
-      throw Exception('No active bundle found for taluka: $taluka');
+      throw Exception('No bundle found for taluka: $taluka');
     }
   }
+
+// New method that gets sequence and increments count
+  // Future<int> _getNextSequenceNumberAndIncrement(String taluka) async {
+  //   final db = await _databaseHelper.database;
+  //   final result = await db.query(
+  //     'bundles',
+  //     where: 'taluka = ? AND status = ?',
+  //     whereArgs: [taluka, 'active'],
+  //     limit: 1,
+  //   );
+
+  //   if (result.isNotEmpty) {
+  //     final bundle = result.first;
+  //     final bundleNo = (bundle['bundleNo'] ?? 1) as int;
+  //     final currentCount = (bundle['count'] ?? 0) as int;
+
+  //     print(
+  //         'BEFORE INCREMENT: Bundle $bundleNo, Taluka: $taluka, Count: $currentCount');
+
+  //     // Calculate sequence number
+  //     final sequenceNumber = (bundleNo - 1) * 250 + currentCount + 1;
+
+  //     // Increment count immediately in local database
+  //     final updateResult = await db.update(
+  //       'bundles',
+  //       {'count': currentCount + 1},
+  //       where: 'bundleNo = ? AND taluka = ?',
+  //       whereArgs: [bundleNo, taluka],
+  //     );
+
+  //     print('Local count updated: $updateResult rows affected');
+
+  //     // Immediately refresh local bundles for UI
+  //     await refreshLocalBundles();
+
+  //     print(
+  //         'Incremented local count for taluka: $taluka, new count: ${currentCount + 1}');
+
+  //     return sequenceNumber;
+  //   } else {
+  //     throw Exception('No active bundle found for taluka: $taluka');
+  //   }
+  // }
 
   // Save record to temporary sync table
   Future<bool> saveRecordToSync(Map<String, dynamic> record) async {
