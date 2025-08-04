@@ -446,13 +446,12 @@ class DataProvider with ChangeNotifier {
         throw Exception('Taluka name is required for generating unique ID');
       }
 
-      // Get taluka abbreviation
+      // Get taluka and location abbreviations (existing logic)
       final talukaAbbr = _talukaAbbreviations[talukaName];
       if (talukaAbbr == null) {
         throw Exception('No abbreviation found for taluka: $talukaName');
       }
 
-      // Find location for this taluka using the config data
       String? locationSlug;
       for (final location in _fullLocationData) {
         final talukas = List<String>.from(location['talukas'] ?? []);
@@ -466,27 +465,16 @@ class DataProvider with ChangeNotifier {
         throw Exception('Location not found for taluka: $talukaName');
       }
 
-      // Get location abbreviation
       final locationAbbr = _locationAbbreviations[locationSlug];
       if (locationAbbr == null) {
         throw Exception('No abbreviation found for location: $locationSlug');
       }
 
-      // Find next sequence number for this taluka
-      final nextSequence = await _getNextSequenceNumber(talukaName);
+      // Get current sequence and increment count immediately
+      final nextSequence = await _getNextSequenceNumberAndIncrement(talukaName);
 
-      // Generate unique ID
       final uniqueId = '$locationAbbr$talukaAbbr$nextSequence';
       print('Generated unique ID: $uniqueId for taluka: $talukaName');
-
-      // Store the unique ID in permanent storage
-      // final searchFromValue = record['Search from'] ??
-      //     record['Search From'] ??
-      //     record['search from'];
-      // if (searchFromValue != null) {
-      //   await _databaseHelper.updateRecordWithUniqueId(
-      //       searchFromValue.toString(), uniqueId);
-      // }
 
       return uniqueId;
     } catch (e) {
@@ -512,6 +500,45 @@ class DataProvider with ChangeNotifier {
       return (bundleNo - 1) * 250 + count;
     } else {
       throw Exception('No bundle found for taluka: $taluka');
+    }
+  }
+
+// New method that gets sequence and increments count
+  Future<int> _getNextSequenceNumberAndIncrement(String taluka) async {
+    final db = await _databaseHelper.database;
+    final result = await db.query(
+      'bundles',
+      where: 'taluka = ? AND status = ?',
+      whereArgs: [taluka, 'active'],
+      limit: 1,
+    );
+
+    if (result.isNotEmpty) {
+      final bundle = result.first;
+      final bundleNo = (bundle['bundleNo'] ?? 1) as int;
+      final currentCount = (bundle['count'] ?? 0) as int;
+
+      // Calculate sequence number
+      final sequenceNumber = (bundleNo - 1) * 250 + currentCount;
+
+      // Increment count immediately
+      await db.update(
+        'bundles',
+        {'count': currentCount + 1},
+        where: 'bundleNo = ? AND taluka = ?',
+        whereArgs: [bundleNo, taluka],
+      );
+
+      // Refresh the serverBundles list to reflect the change
+      _serverBundles = await _databaseHelper.getActiveLocalBundles();
+
+      print(
+          'Incremented count for taluka: $taluka, new count: ${currentCount + 1}');
+      notifyListeners(); // This will update the UI
+
+      return sequenceNumber;
+    } else {
+      throw Exception('No active bundle found for taluka: $taluka');
     }
   }
 
@@ -561,26 +588,51 @@ class DataProvider with ChangeNotifier {
         return false;
       }
 
-      final syncData = {
-        'taluka': 'TestTaluka',
-        'bundleNo': 1,
-        'sourceFile': '...',
-        'records': records,
-      };
-
-      print('Syncing ${records.length} records to server...');
-      final success = await _apiService.syncProcessedRecords(syncData);
-
-      if (success) {
-        // Clear the temporary table only if sync was successful
-        await _databaseHelper.clearRecordsToSync();
-        notifyListeners();
-        print('Records synced successfully and temporary table cleared');
-      } else {
-        print('Failed to sync records to server');
+      // Group records by taluka for proper sync data
+      final Map<String, List<Map<String, dynamic>>> recordsByTaluka = {};
+      for (final record in records) {
+        final taluka = record['Taluka']?.toString() ?? 'Unknown';
+        recordsByTaluka.putIfAbsent(taluka, () => []).add(record);
       }
 
-      return success;
+      // Sync each taluka's records separately (or send all together - depends on your API)
+      for (final entry in recordsByTaluka.entries) {
+        final taluka = entry.key;
+        final talukaRecords = entry.value;
+
+        // Get bundle info for this taluka
+        final db = await _databaseHelper.database;
+        final bundleResult = await db.query(
+          'bundles',
+          where: 'taluka = ? AND status = ?',
+          whereArgs: [taluka, 'active'],
+          limit: 1,
+        );
+
+        if (bundleResult.isNotEmpty) {
+          final bundle = bundleResult.first;
+          final syncData = {
+            'taluka': taluka,
+            'bundleNo': bundle['bundleNo'],
+            'sourceFile': 'mobile_app_processed',
+            'records': talukaRecords,
+          };
+
+          print('Syncing ${talukaRecords.length} records for taluka: $taluka');
+          final success = await _apiService.syncProcessedRecords(syncData);
+
+          if (!success) {
+            print('Failed to sync records for taluka: $taluka');
+            return false;
+          }
+        }
+      }
+
+      // Clear temp table only if all syncs were successful
+      await _databaseHelper.clearRecordsToSync();
+      notifyListeners();
+      print('All records synced successfully and temporary table cleared');
+      return true;
     } catch (e) {
       print('Error syncing records to server: $e');
       return false;

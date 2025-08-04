@@ -414,11 +414,9 @@ class _DataScreenState extends State<DataScreen> {
                                           await provider.syncRecordsToServer();
 
                                       if (success) {
-                                        final dataProvider =
-                                            Provider.of<DataProvider>(context,
-                                                listen: false);
-                                        await dataProvider.incrementBundleCount(
-                                            _selectedRecord!['taluka']);
+                                        // Remove this line - count is already incremented during ID generation
+                                        // await dataProvider.incrementBundleCount(_selectedRecord!['taluka']);
+
                                         final recordCount = _tempRecords.length;
                                         setState(() {
                                           _tempRecords = [];
@@ -635,7 +633,18 @@ class _DataScreenState extends State<DataScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _refreshData,
+        onPressed: () async {
+          final dataProvider =
+              Provider.of<DataProvider>(context, listen: false);
+          await dataProvider.fetchAndSyncBundles();
+          await _loadTempRecords(); // Also refresh temp records count
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Data refreshed'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        },
         backgroundColor: Colors.blue,
         child: const Icon(Icons.refresh),
       ),
@@ -885,11 +894,13 @@ class _DataScreenState extends State<DataScreen> {
 
                           setState(() {
                             _isUniqueIdGenerated = true;
-                            // Add the generated unique ID to the selected record
                             _selectedRecord =
                                 Map<String, dynamic>.from(_selectedRecord!)
                                   ..['UniqueId'] = uniqueId;
                           });
+
+                          // Refresh bundles to show updated count
+                          await provider.fetchAndSyncBundles();
 
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
