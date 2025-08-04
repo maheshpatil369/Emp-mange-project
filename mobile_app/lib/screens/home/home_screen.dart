@@ -30,8 +30,10 @@ class _HomeScreenState extends State<HomeScreen> {
       String location = await ApiService().getUserLocation();
       if (location == "ahilyanagar") {
         _userDistrict = "Ahilyanagar";
+        print('User district set to Ahilyanagar');
       } else if (location == "chhatrapati-sambhajinagar") {
-        _userDistrict = "Chhatrapati-Sambhajinagar";
+        _userDistrict = "Chhatrapati Sambhajinagar";
+        print('User district set to Chhatrapati Sambhajinagar');
       } else {
         _userDistrict = location;
       }
@@ -85,17 +87,20 @@ class _HomeScreenState extends State<HomeScreen> {
           // List<String> availableTalukas = dataProvider.filteredTalukas;
           String? userDistrictSlug;
           if (_userDistrict != null) {
+            print('User District: $_userDistrict');
             // Find the slug for the user's district
             final district = dataProvider.districts.firstWhere(
               (d) => d['name']?.toLowerCase() == _userDistrict!.toLowerCase(),
               orElse: () => {},
             );
             userDistrictSlug = district['slug'];
+            print('User District Slug: $userDistrictSlug');
           }
 
           // Get talukas for the user's district only
           List<String> availableTalukas = [];
           if (userDistrictSlug != null) {
+            print('User District Slug: $userDistrictSlug');
             final location = dataProvider.fullLocationData.firstWhere(
               (loc) => loc['slug'] == userDistrictSlug,
               orElse: () => {},

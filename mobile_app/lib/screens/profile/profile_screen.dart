@@ -73,7 +73,7 @@ class ProfileScreen extends StatelessWidget {
                             return const Text('Ahilyanagar');
                           } else if (location.toLowerCase() ==
                               'chhatrapati-sambhajinagar') {
-                            return const Text('Chhatrapati-Sambhajinagar');
+                            return const Text('Chhatrapati Sambhajinagar');
                           } else {
                             return Text(location);
                           }

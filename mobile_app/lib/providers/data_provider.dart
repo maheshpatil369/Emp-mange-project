@@ -20,7 +20,9 @@ class DataProvider with ChangeNotifier {
   // Getters
   List<Map<String, String>> get districts {
     if (_fullLocationData.isEmpty) return [];
+    print('Fetching districts from fullLocationData');
     return _fullLocationData.map((loc) {
+      print('District: ${loc['name']}, Slug: ${loc['slug']}');
       return {
         'name': loc['name'] as String,
         'slug': loc['slug'] as String,
@@ -42,6 +44,8 @@ class DataProvider with ChangeNotifier {
       (loc) => loc['slug'] == _selectedDistrictSlug,
       orElse: () => {'talukas': <String>[]},
     );
+    print(
+        'Filtered talukas for district $_selectedDistrictSlug: ${selected['talukas']}');
 
     return List<String>.from(selected['talukas'] ?? []);
   }
@@ -171,7 +175,9 @@ class DataProvider with ChangeNotifier {
       for (var serverBundle in serverBundlesList) {
         print('Processing server bundle: ${serverBundle['bundleNo']}');
         final bundleNo = serverBundle['bundleNo'];
-        if (localBundlesMap.containsKey(bundleNo)) {
+        final bundleTaluka = serverBundle['taluka'] ?? '';
+        if (localBundlesMap.containsKey(bundleNo) &&
+            localBundlesMap[bundleNo]['taluka'] == bundleTaluka) {
           bundlesToUpdate.add(serverBundle);
         } else {
           bundlesToAdd.add(serverBundle);
@@ -322,13 +328,16 @@ class DataProvider with ChangeNotifier {
       if (records.isEmpty) {
         return 'No records to download from server.';
       }
+      print('Downloading ${records.length} records from server...');
 
       // NEW LOGIC: Check if any of the fetched records already exist locally
       if (await _databaseHelper.checkIfAnyRecordExists(records)) {
+        print('Records are already downloaded (batch detected as duplicate).');
         return 'Records are already downloaded (batch detected as duplicate).';
       }
 
       await _databaseHelper.insertRawRecords(records);
+      print('Records downloaded and stored locally.');
       notifyListeners();
       return 'Records downloaded and stored locally!';
     } catch (e) {
@@ -416,8 +425,8 @@ class DataProvider with ChangeNotifier {
         await db.update(
           'bundles',
           {'count': newCount},
-          where: 'bundleNo = ?',
-          whereArgs: [bundle['bundleNo']],
+          where: 'bundleNo = ? AND taluka = ?',
+          whereArgs: [bundle['bundleNo'], taluka],
         );
         print(
             'Bundle count incremented for taluka: $taluka, new count: $newCount');

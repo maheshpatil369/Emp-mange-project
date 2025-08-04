@@ -388,7 +388,6 @@ class DatabaseHelper {
     if (records.isEmpty) {
       return false;
     }
-
     final db = await database;
     try {
       // Get all existing records from the local database

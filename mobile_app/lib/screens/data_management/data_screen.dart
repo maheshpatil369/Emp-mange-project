@@ -284,26 +284,16 @@ class _DataScreenState extends State<DataScreen> {
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
                             ),
-                            onPressed: _alreadyDownloaded
-                                ? () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              'Records are already downloaded')),
-                                    );
-                                  }
-                                : () async {
-                                    final provider = Provider.of<DataProvider>(
-                                        context,
-                                        listen: false);
-                                    await provider
-                                        .downloadAndStoreAssignedRecords();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              'Records downloaded and stored locally!')),
-                                    );
-                                  },
+                            onPressed: () async {
+                              final provider = Provider.of<DataProvider>(
+                                  context,
+                                  listen: false);
+                              final result = await provider
+                                  .downloadAndStoreAssignedRecords();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(result)),
+                              );
+                            },
                           ),
                           const SizedBox(width: 12), // spacing between buttons
                           ElevatedButton.icon(
