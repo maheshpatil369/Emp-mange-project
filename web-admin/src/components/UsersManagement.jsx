@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { PlusCircle, Loader2, AlertTriangle, Edit, Trash2 } from "lucide-react";
 import apiClient from "../lib/axios";
+import toast from "react-hot-toast";
 
 const UsersManagement = () => {
   const [users, setUsers] = useState([]);
@@ -212,11 +213,11 @@ const CreateUserModal = ({ closeModal, onUserCreated }) => {
     setLoading(true);
     try {
       await apiClient.post("/users", formData);
-      alert("User created successfully!");
+      toast.success(`User "${formData.username}" created successfully!`);
       onUserCreated();
       closeModal();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to create user.");
+      toast.error(err.response?.data?.message || "Failed to create user.");
     } finally {
       setLoading(false);
     }
@@ -375,11 +376,11 @@ const EditUserModal = ({ user, closeModal, onUserUpdated }) => {
     setLoading(true);
     try {
       await apiClient.put(`/users/${user.id}`, formData);
-      alert("User updated successfully!");
+      toast.success("User updated successfully!");
       onUserUpdated();
       closeModal();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to update user.");
+      toast.error(err.response?.data?.message || "Failed to update user.");
     } finally {
       setLoading(false);
     }
@@ -474,11 +475,12 @@ const DeleteUserModal = ({ user, closeModal, onUserDeleted }) => {
     setError("");
     try {
       await apiClient.delete(`/users/${user.id}`);
-      alert("User deleted successfully!");
+      toast.success("User deleted successfully!");
       onUserDeleted();
       closeModal();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to delete user.");
+      // setError(err.response?.data?.message || "Failed to delete user.");
+      toast.error(err.response?.data?.message || "Failed to delete user.");
     } finally {
       setLoading(false);
     }

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import apiClient from "../lib/axios";
 import { Outlet } from "react-router-dom";
+import toast from "react-hot-toast";
 
 export const DataManagementPage = () => {
   return (
@@ -106,7 +107,7 @@ export const LocationFileManagement = () => {
     formData.append("file", selectedFile);
     try {
       await apiClient.post(`/data/upload/${location}`, formData);
-      alert("File uploaded successfully!");
+      toast.success("File uploaded successfully!");
       fetchFiles(); // Refresh the list
     } catch (err) {
       setError(err.response?.data?.message || "Upload failed.");
@@ -126,7 +127,7 @@ export const LocationFileManagement = () => {
     }
     try {
       await apiClient.delete(`/data/files/${location}/${fileId}`);
-      alert("File deleted successfully!");
+      toast.success("File deleted successfully!");
       fetchFiles(); // Refresh the list after deletion
     } catch (err) {
       setError(err.response?.data?.message || "Failed to delete file.");
@@ -150,7 +151,7 @@ export const LocationFileManagement = () => {
       {error && <p className="text-red-500">{error}</p>}
 
       {/* Upload Section */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
+      {/* <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-xl font-semibold text-gray-700 mb-4">
           Upload Files
         </h2>
@@ -173,7 +174,36 @@ export const LocationFileManagement = () => {
             {uploading ? "Uploading..." : "Upload"}
           </button>
         </div>
-      </div>
+      </div> */}
+
+
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
+  <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b-2 border-green-400 inline-block pb-1">
+    Upload Files
+  </h2>
+
+  <div className="flex items-center space-x-4">
+    <input
+      type="file"
+      onChange={(e) => setSelectedFile(e.target.files[0])}
+      className="flex-1 text-sm text-gray-600 border border-gray-300 rounded-lg p-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200 transition"
+    />
+
+    <button
+      onClick={handleUpload}
+      disabled={!selectedFile || uploading}
+      className="flex items-center justify-center px-5 py-2 font-semibold text-white bg-green-600 rounded-lg shadow-md hover:bg-green-500 active:scale-95 disabled:bg-green-300 transition-all duration-200"
+    >
+      {uploading ? (
+        <Loader2 className="w-5 h-5 animate-spin" />
+      ) : (
+        <UploadCloud className="w-5 h-5 mr-2" />
+      )}
+      {uploading ? "Uploading..." : "Upload"}
+    </button>
+  </div>
+</div>
+
 
       {/* Uploaded Files Section */}
       <div className="bg-white p-6 rounded-lg shadow-md">
@@ -213,12 +243,19 @@ export const LocationFileManagement = () => {
                     {file.uploadDate}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
+                    {/* <button
                       onClick={() => handleDelete(file.id)}
                       className="text-red-600 hover:text-red-900"
                     >
                       Delete
-                    </button>
+                    </button> */}
+                    <button
+                 onClick={() => handleDelete(file.id)}
+                 className="px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-md shadow hover:bg-red-700 active:scale-95 transition-all duration-200"
+                   >
+                    Delete
+                  </button>
+
                   </td>
                 </tr>
               ))}
@@ -246,18 +283,33 @@ const LocationsSection = ({ locations, loading }) => (
     ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {locations.map((loc) => (
+          // <div
+          //   key={loc.slug}
+          //   className="p-4 border rounded-lg flex items-center justify-between"
+          // >
+          //   <span className="font-medium">{loc.name}</span>
+          //   <Link
+          //     to={`/data-management/${loc.slug}`}
+          //     className="flex items-center text-sm text-blue-600 hover:underline"
+          //   >
+          //     Manage Data <ChevronRight className="w-4 h-4 ml-1" />
+          //   </Link>
+          // </div>
           <div
-            key={loc.slug}
-            className="p-4 border rounded-lg flex items-center justify-between"
-          >
-            <span className="font-medium">{loc.name}</span>
-            <Link
-              to={`/data-management/${loc.slug}`}
-              className="flex items-center text-sm text-blue-600 hover:underline"
-            >
-              Manage Data <ChevronRight className="w-4 h-4 ml-1" />
-            </Link>
-          </div>
+  key={loc.slug}
+  className="p-4 border-2 border-gray-300 rounded-lg flex items-center justify-between shadow-sm hover:shadow-md transition"
+>
+  <span className="font-medium">{loc.name}</span>
+
+  <Link
+    to={`/data-management/${loc.slug}`}
+    className="ml-2 flex items-center gap-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md shadow-md hover:bg-green-500 active:scale-95 transition-all duration-200"
+  >
+    Manage Data
+    <ChevronRight className="w-4 h-4" />
+  </Link>
+</div>
+
         ))}
       </div>
     )}
@@ -459,7 +511,7 @@ const DownloadRecords = ({ locations }) => {
       link.click();
       link.remove();
     } catch (err) {
-      alert(
+      toast.error(
         "Failed to download records. There might be no data for this location."
       );
       console.error(err);
@@ -582,11 +634,11 @@ const MarkIncompleteForm = ({ users, config }) => {
     setLoading(true);
     try {
       await apiClient.post("/admin/mark-incomplete-complete", formData);
-      alert("Active bundle cleared successfully!");
+      toast.success("Active bundle cleared successfully!");
       e.target.reset();
       setFormData({ userId: "", taluka: "" });
     } catch (err) {
-      alert(err.response?.data?.message || "Operation failed.");
+      toast.error(err.response?.data?.message || "Operation failed.");
     } finally {
       setLoading(false);
     }
@@ -657,11 +709,11 @@ const ForceCompleteForm = ({ users, config }) => {
     setLoading(true);
     try {
       await apiClient.post("/admin/force-complete", formData);
-      alert("Bundle force completed successfully!");
+      toast.success("Bundle force completed successfully!");
       e.target.reset();
       setFormData({ userId: "", taluka: "", bundleNo: "" });
     } catch (err) {
-      alert(err.response?.data?.message || "Operation failed.");
+      toast.error(err.response?.data?.message || "Operation failed.");
     } finally {
       setLoading(false);
     }
@@ -744,11 +796,11 @@ const ManualAssignForm = ({ users, config }) => {
     setLoading(true);
     try {
       await apiClient.post("/admin/manual-assign", formData);
-      alert("Bundle assigned successfully!");
+      toast.success("Bundle assigned successfully!");
       e.target.reset();
       setFormData({ userId: "", taluka: "", bundleNo: "" });
     } catch (err) {
-      alert(err.response?.data?.message || "Operation failed.");
+      toast.error(err.response?.data?.message || "Operation failed.");
     } finally {
       setLoading(false);
     }
@@ -827,11 +879,11 @@ const ResetProgressForm = ({ users, config }) => {
     setLoading(true);
     try {
       await apiClient.post("/admin/reset-progress", formData);
-      alert("User progress reset successfully!");
+      toast.success("User progress reset successfully!");
       e.target.reset();
       setFormData({ userId: "", taluka: "" });
     } catch (err) {
-      alert(err.response?.data?.message || "Operation failed.");
+      toast.error(err.response?.data?.message || "Operation failed.");
     } finally {
       setLoading(false);
     }
@@ -928,9 +980,9 @@ const DangerZone = () => {
     setLoading(true);
     try {
       await apiClient.post("/admin/danger-zone/reset-all-data");
-      alert("All processed data has been deleted.");
+      toast.success("All processed data has been deleted.");
     } catch (err) {
-      alert("Operation failed.");
+      toast.error("Operation failed.");
     } finally {
       setLoading(false);
     }
@@ -946,9 +998,9 @@ const DangerZone = () => {
     setLoading(true);
     try {
       await apiClient.post("/admin/danger-zone/reset-all-counters");
-      alert("All counters and user states have been reset.");
+      toast.success("All counters and user states have been reset.");
     } catch (err) {
-      alert("Operation failed.");
+      toast.error("Operation failed.");
     } finally {
       setLoading(false);
     }
