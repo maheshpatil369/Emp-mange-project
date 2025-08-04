@@ -125,6 +125,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/data_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -149,6 +150,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _login() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final dataProvider = Provider.of<DataProvider>(context, listen: false);
+
     try {
       await authProvider.signInWithEmailAndPassword(
         _emailController.text,
@@ -156,6 +159,8 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (authProvider.isAuthenticated) {
+        // Load user-specific data after successful login
+        await dataProvider.loadUserData();
         Navigator.of(context).pushReplacementNamed('/home');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/data_provider.dart';
 import '../../api/api_service.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -85,8 +86,16 @@ class ProfileScreen extends StatelessWidget {
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    // `authProvider.signOut()` method ko call karein
+                    // Get DataProvider to clear user-specific data
+                    final dataProvider =
+                        Provider.of<DataProvider>(context, listen: false);
+
+                    // Clear user-specific data first
+                    await dataProvider.clearUserData();
+
+                    // Then sign out from auth
                     await authProvider.signOut();
+
                     Navigator.of(context).pushReplacementNamed('/login');
                   },
                   icon: const Icon(Icons.logout),

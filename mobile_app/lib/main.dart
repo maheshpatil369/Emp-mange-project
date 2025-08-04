@@ -122,11 +122,18 @@ void main() async {
   final authProvider = AuthProvider();
   await authProvider.checkLoginStatus();
 
+  final dataProvider = DataProvider();
+  // Only load bundles if user is authenticated
+  if (authProvider.isAuthenticated) {
+    await dataProvider
+        .loadUserData(); // Use loadUserData instead of loadBundlesFromPrefsAndOverwriteDB
+  }
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
-        ChangeNotifierProvider(create: (context) => DataProvider()),
+        ChangeNotifierProvider<DataProvider>.value(value: dataProvider),
       ],
       child: const MyApp(),
     ),

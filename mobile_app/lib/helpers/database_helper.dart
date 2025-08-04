@@ -24,7 +24,7 @@ class DatabaseHelper {
   static Database? _database;
 
   // Increment database version to trigger new upgrade
-  static const int _databaseVersion = 3;
+  static const int _databaseVersion = 4;
 
   // Get the full path of the database
   Future<String> getDatabasePath() async {
@@ -116,8 +116,54 @@ class DatabaseHelper {
       ''');
       print('Bundles table created during upgrade');
       // Add 'count' column if upgrading from a version without it
-      await db.execute('ALTER TABLE bundles ADD COLUMN count INTEGER');
-      print('Added count column to bundles table');
+      try {
+        await db.execute('ALTER TABLE bundles ADD COLUMN count INTEGER DEFAULT 0');
+        print('Added count column to bundles table');
+      } catch (e) {
+        print('Count column might already exist: $e');
+      }
+    }
+    
+    if (oldVersion < 4) {
+      // Add unique constraint to prevent duplicate bundles
+      try {
+        // First, remove any duplicate bundles if they exist
+        await db.execute('''
+          DELETE FROM bundles 
+          WHERE id NOT IN (
+            SELECT MIN(id) 
+            FROM bundles 
+            GROUP BY bundleNo, taluka
+          )
+        ''');
+        print('Removed duplicate bundles');
+        
+        // Create new table with unique constraint
+        await db.execute('''
+          CREATE TABLE bundles_new(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bundleNo INTEGER,
+            taluka TEXT,
+            assignedAt TEXT,
+            status TEXT DEFAULT 'active',
+            count INTEGER DEFAULT 0,
+            UNIQUE(bundleNo, taluka)
+          )
+        ''');
+        
+        // Copy data from old table to new table
+        await db.execute('''
+          INSERT INTO bundles_new (id, bundleNo, taluka, assignedAt, status, count)
+          SELECT id, bundleNo, taluka, assignedAt, status, count FROM bundles
+        ''');
+        
+        // Drop old table and rename new table
+        await db.execute('DROP TABLE bundles');
+        await db.execute('ALTER TABLE bundles_new RENAME TO bundles');
+        print('Added unique constraint to bundles table');
+      } catch (e) {
+        print('Error adding unique constraint: $e');
+      }
     }
   }
 
@@ -142,7 +188,8 @@ class DatabaseHelper {
           taluka TEXT,
           assignedAt TEXT,
           status TEXT DEFAULT 'active',
-          count INTEGER
+          count INTEGER DEFAULT 0,
+          UNIQUE(bundleNo, taluka)
         )
       ''');
       print('Bundles table created successfully');
@@ -211,11 +258,36 @@ class DatabaseHelper {
         ''');
         print('Bundles table created on-the-fly');
       }
+
+      // Check if a bundle with the same bundleNo and taluka already exists
+      final existingBundle = await db.query(
+        'bundles',
+        where: 'bundleNo = ? AND taluka = ?',
+        whereArgs: [bundleData['bundleNo'], bundleData['taluka']],
+      );
+
+      if (existingBundle.isNotEmpty) {
+        print('Bundle already exists: ${existingBundle.first}');
+        // Update the existing bundle instead of inserting a new one
+        final updateResult = await db.update(
+          'bundles',
+          {
+            'status': bundleData['status'] ?? 'active',
+            'count': bundleData['count'] ?? existingBundle.first['count'] ?? 0,
+            'assignedAt': bundleData['assignedAt'] ?? existingBundle.first['assignedAt'],
+          },
+          where: 'bundleNo = ? AND taluka = ?',
+          whereArgs: [bundleData['bundleNo'], bundleData['taluka']],
+        );
+        print("Bundle updated successfully. Rows affected: $updateResult");
+        return existingBundle.first['id'] as int;
+      }
+
       // Prepare bundle data
       final bundleToInsert = {
         'bundleNo': bundleData['bundleNo'],
         'taluka': bundleData['taluka'],
-        'assignedAt': DateTime.now().toIso8601String(),
+        'assignedAt': bundleData['assignedAt'] ?? DateTime.now().toIso8601String(),
         'status': bundleData['status'] ?? 'active',
         'count': bundleData['count'] ?? 0, // Default to 0 if not provided
       };
@@ -225,11 +297,28 @@ class DatabaseHelper {
         throw DatabaseOperationException(
             'Bundle number and taluka are required');
       }
+      
+      // With the unique constraint, we can use INSERT OR IGNORE
       final insertResult = await db.insert(
         'bundles',
         bundleToInsert,
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        conflictAlgorithm: ConflictAlgorithm.ignore,
       );
+      
+      if (insertResult == 0) {
+        // Bundle already exists, get its ID
+        final existing = await db.query(
+          'bundles',
+          where: 'bundleNo = ? AND taluka = ?',
+          whereArgs: [bundleToInsert['bundleNo'], bundleToInsert['taluka']],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) {
+          print("Bundle already exists: ${existing.first}");
+          return existing.first['id'] as int;
+        }
+      }
+      
       print("Bundle inserted successfully. Row ID: $insertResult");
       return insertResult;
     } catch (e, stackTrace) {
@@ -237,8 +326,8 @@ class DatabaseHelper {
       print('Stacktrace: $stackTrace');
       // Additional diagnostic information
       try {
-        final db = await database;
-        final tables = await db
+        final diagDb = await database;
+        final tables = await diagDb
             .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
         print('Existing tables: $tables');
       } catch (diagnosisError) {
@@ -421,7 +510,7 @@ class DatabaseHelper {
     if (records.isEmpty) {
       return false;
     }
-    final db = await database;
+    
     try {
       // Get all existing records from the local database
       final List<Map<String, dynamic>> localRecords = await getAllRawRecords();

@@ -2,7 +2,7 @@
 // import 'dart:nativewrappers/_internal/vm/lib/internal_patch.dart';
 
 import 'dart:async';
-// import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../api/api_service.dart';
 import '../helpers/database_helper.dart';
@@ -10,7 +10,7 @@ import '../models/member_model.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-// import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DataProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -79,7 +79,7 @@ class DataProvider with ChangeNotifier {
   // Modify the constructor to print database path
   DataProvider() {
     loadConfig();
-    // fetchLocalData();
+    // Don't load bundles automatically - will be loaded after authentication
   }
 
   // To correctly process the API response
@@ -142,11 +142,38 @@ class DataProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Always load local bundles first for immediate UI display
+      // 1. First, try to load from SharedPreferences (preserves counts)
+      final userEmail = await _getCurrentUserEmail();
+      String? bundlesJson;
+
+      if (userEmail != null) {
+        final prefs = await SharedPreferences.getInstance();
+        bundlesJson = prefs.getString('activeBundles_$userEmail');
+        print('Loading bundles for user: $userEmail');
+      }
+
+      if (bundlesJson != null) {
+        print('Loading bundles from SharedPreferences first...');
+        final savedBundles = (json.decode(bundlesJson) as List)
+            .map((item) => item as Map<String, dynamic>)
+            .toList();
+
+        // Load saved bundles into local database if not already there
+        final localBundles = await _databaseHelper.getActiveLocalBundles();
+        if (localBundles.isEmpty && savedBundles.isNotEmpty) {
+          for (var bundle in savedBundles) {
+            await _databaseHelper.insertBundle(bundle);
+          }
+          print(
+              'Restored ${savedBundles.length} bundles from SharedPreferences to local DB');
+        }
+      }
+
+      // 2. Always load local bundles first for immediate UI display
       _serverBundles = await _databaseHelper.getActiveLocalBundles();
       notifyListeners(); // Show local data immediately
 
-      // 2. Try to sync with server in background
+      // 3. Try to sync with server in background (but preserve local counts)
       final serverResponse = await _apiService.fetchActiveBundles().timeout(
         const Duration(seconds: 10),
         onTimeout: () {
@@ -167,14 +194,11 @@ class DataProvider with ChangeNotifier {
           .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
           .toList();
 
-      // 3. Sync server data with local data (preserving local counts)
+      // 4. Sync server data with local data (but ALWAYS preserve local counts)
       final localBundles = await _databaseHelper.getActiveLocalBundles();
       final localBundlesMap = {for (var b in localBundles) b['bundleNo']: b};
-      final serverBundlesMap = {
-        for (var b in serverBundlesList) b['bundleNo']: b
-      };
 
-      // 4. Apply changes to the local database (but preserve local counts)
+      // 5. Apply changes to the local database (but preserve local counts)
       final bundlesToUpdate = <Map<String, dynamic>>[];
       final bundlesToAdd = <Map<String, dynamic>>[];
 
@@ -182,14 +206,20 @@ class DataProvider with ChangeNotifier {
       for (var serverBundle in serverBundlesList) {
         final bundleNo = serverBundle['bundleNo'];
         if (localBundlesMap.containsKey(bundleNo)) {
-          // Bundle exists locally - update but preserve local count
+          // Bundle exists locally - ALWAYS preserve local count
           final localBundle = localBundlesMap[bundleNo]!;
           final updatedBundle = Map<String, dynamic>.from(serverBundle);
-          updatedBundle['count'] = localBundle['count']; // Preserve local count
+          updatedBundle['count'] = localBundle['count']; // PRESERVE local count
+          updatedBundle['assignedAt'] =
+              localBundle['assignedAt']; // PRESERVE assignedAt
           bundlesToUpdate.add(updatedBundle);
+          print(
+              'Preserving local count ${localBundle['count']} for bundle ${bundleNo}');
         } else {
-          // New bundle from server
+          // New bundle from server - use server count (usually 0) only for new bundles
           bundlesToAdd.add(serverBundle);
+          print(
+              'Adding new bundle ${bundleNo} from server with count ${serverBundle['count'] ?? 0}');
         }
       }
 
@@ -201,9 +231,13 @@ class DataProvider with ChangeNotifier {
         await _databaseHelper.updateBundle(bundle);
       }
 
-      // 5. Refresh local state and show updated data
+      // 6. Refresh local state and show updated data
       _serverBundles = await _databaseHelper.getActiveLocalBundles();
       _isOffline = false;
+
+      // 7. Save the synced bundles to SharedPreferences (with preserved counts)
+      await _saveBundlesToPrefs(_serverBundles);
+
       print(
           'Successfully synced bundles with server while preserving local counts.');
     } catch (e) {
@@ -224,15 +258,17 @@ class DataProvider with ChangeNotifier {
     await fetchAndSyncBundles();
   }
 
-  Future<void> deleteAllLocalBundles() async {
+  Future<bool> deleteAllLocalBundles() async {
     try {
       final db = await _databaseHelper.database;
       await db
           .delete('bundles'); // Replace 'bundles' with your actual table name
       print('All bundles deleted from local database.');
       notifyListeners();
+      return true;
     } catch (e) {
       print('Error deleting bundles: $e');
+      return false;
     }
   }
 
@@ -251,12 +287,22 @@ class DataProvider with ChangeNotifier {
         throw Exception('Taluka cannot be empty');
       }
 
-      // Check if a bundle for this taluka already exists
-      print("Checking if bundle exists for taluka: $cleanTaluka");
+      // Check if a bundle for this taluka already exists locally first
+      print("Checking if bundle exists locally for taluka: $cleanTaluka");
+      final localBundles = await _databaseHelper.getActiveLocalBundles();
+      final existsLocally =
+          localBundles.any((bundle) => bundle['taluka'] == cleanTaluka);
+
+      if (existsLocally) {
+        return ('Bundle already exists locally for this taluka');
+      }
+
+      // Check if a bundle for this taluka already exists on server
+      print("Checking if bundle exists on server for taluka: $cleanTaluka");
       if (await _apiService
           .fetchActiveBundles()
           .then((bundles) => bundles.containsKey(cleanTaluka))) {
-        return ('Bundle already exists for this taluka');
+        return ('Bundle already exists on server for this taluka');
       }
       // Call API to assign bundle
       final bundleResponse = await _apiService.assignBundle(cleanTaluka);
@@ -269,6 +315,11 @@ class DataProvider with ChangeNotifier {
       };
       // Store bundle in local db
       await _databaseHelper.insertBundle(bundleData);
+
+      // Refresh local bundles and save to SharedPreferences
+      await refreshLocalBundles();
+      await _saveBundlesToPrefs(_serverBundles);
+
       _errorMessage = null;
       print('Bundle assigned and stored successfully for $cleanTaluka');
       return 'Bundle assigned successfully for $cleanTaluka';
@@ -468,6 +519,9 @@ class DataProvider with ChangeNotifier {
 
       // Immediately refresh local bundles for UI
       await refreshLocalBundles();
+
+      // Save updated bundles to SharedPreferences to persist the count
+      await _saveBundlesToPrefs(_serverBundles);
 
       print(
           'Incremented local count for taluka: $taluka, new count: ${currentCount + 1}');
@@ -694,6 +748,109 @@ class DataProvider with ChangeNotifier {
     }
   }
 
+  // Get current user's email from SharedPreferences
+  Future<String?> _getCurrentUserEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('email');
+  }
+
+  // Save active bundles to SharedPreferences (user-specific)
+  Future<void> _saveBundlesToPrefs(List<Map<String, dynamic>> bundles) async {
+    final userEmail = await _getCurrentUserEmail();
+    if (userEmail != null) {
+      final prefs = await SharedPreferences.getInstance();
+      final bundlesJson = json.encode(bundles);
+      await prefs.setString('activeBundles_$userEmail', bundlesJson);
+      print('Active bundles saved to SharedPreferences for user: $userEmail');
+    } else {
+      print('No user email found, cannot save user-specific bundles');
+    }
+  }
+
+  // Load bundles from SharedPreferences and overwrite local DB
+  Future<void> loadBundlesFromPrefsAndOverwriteDB() async {
+    print('Loading bundles from SharedPreferences and overwriting local DB...');
+    final userEmail = await _getCurrentUserEmail();
+    String? bundlesJson;
+
+    if (userEmail != null) {
+      final prefs = await SharedPreferences.getInstance();
+      bundlesJson = prefs.getString('activeBundles_$userEmail');
+      print('Loading bundles for user: $userEmail');
+    }
+
+    if (bundlesJson != null) {
+      // 1. Decode the JSON string to a list of maps
+      final bundles = (json.decode(bundlesJson) as List)
+          .map((item) => item as Map<String, dynamic>)
+          .toList();
+
+      // 2. Clear the existing local bundles table
+      await deleteAllLocalBundles();
+      print('Local bundles table cleared.');
+
+      // 3. Insert the bundles from SharedPreferences into the local DB
+      for (var bundle in bundles) {
+        await _databaseHelper.insertBundle(bundle);
+      }
+      print('Local DB overwritten with data from SharedPreferences.');
+
+      // 4. Refresh the state to reflect the new data
+      await refreshLocalBundles();
+    } else {
+      print('No bundles found in SharedPreferences.');
+    }
+  }
+
+  // Load bundles from SharedPreferences without server sync (for app startup)
+  Future<void> loadBundlesFromPrefs() async {
+    print('Loading bundles from SharedPreferences for app startup...');
+    final userEmail = await _getCurrentUserEmail();
+
+    if (userEmail == null) {
+      print('No user authenticated, skipping bundle loading');
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final bundlesJson = prefs.getString('activeBundles_$userEmail');
+    print('Loading bundles for user: $userEmail');
+
+    if (bundlesJson != null) {
+      try {
+        // 1. Decode the JSON string to a list of maps
+        final bundles = (json.decode(bundlesJson) as List)
+            .map((item) => item as Map<String, dynamic>)
+            .toList();
+
+        // 2. Check if local database is empty
+        final localBundles = await _databaseHelper.getActiveLocalBundles();
+
+        if (localBundles.isEmpty && bundles.isNotEmpty) {
+          // 3. Insert the bundles from SharedPreferences into the local DB
+          for (var bundle in bundles) {
+            await _databaseHelper.insertBundle(bundle);
+          }
+          print(
+              'Restored ${bundles.length} bundles from SharedPreferences to local DB');
+        }
+
+        // 4. Update the UI state
+        _serverBundles = await _databaseHelper.getActiveLocalBundles();
+        notifyListeners();
+        print(
+            'Local bundles loaded from SharedPreferences: ${_serverBundles.length} bundles');
+      } catch (e) {
+        print('Error loading bundles from SharedPreferences: $e');
+      }
+    } else {
+      print('No bundles found in SharedPreferences.');
+      // Still load whatever is in the local database
+      _serverBundles = await _databaseHelper.getActiveLocalBundles();
+      notifyListeners();
+    }
+  }
+
   // Modify fetchLocalData to attempt sample record insertion if no records found
   // Future<void> fetchLocalData() async {
   //   _isLoadingRecords = true;
@@ -719,4 +876,50 @@ class DataProvider with ChangeNotifier {
   //     notifyListeners();
   //   }
   // }
+
+  // Clear all user-specific data when logging out or switching users
+  Future<void> clearUserData() async {
+    try {
+      print('Clearing all user-specific data...');
+
+      // Clear bundles from local database
+      await deleteAllLocalBundles();
+
+      // Clear records from local database
+      await deleteAllLocalRecords();
+
+      // Clear temporary sync records
+      await emptyTempTable();
+
+      // Clear SharedPreferences (user-specific)
+      final userEmail = await _getCurrentUserEmail();
+      if (userEmail != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('activeBundles_$userEmail');
+        print('Cleared SharedPreferences for user: $userEmail');
+      }
+
+      // Reset state variables
+      _serverBundles.clear();
+      _records.clear();
+      _errorMessage = null;
+      _isOffline = false;
+
+      notifyListeners();
+      print('All user-specific data cleared successfully.');
+    } catch (e) {
+      print('Error clearing user data: $e');
+    }
+  }
+
+  // Load user-specific data after login
+  Future<void> loadUserData() async {
+    try {
+      print('Loading user-specific data...');
+      await loadBundlesFromPrefs();
+      print('User-specific data loaded successfully.');
+    } catch (e) {
+      print('Error loading user data: $e');
+    }
+  }
 }
