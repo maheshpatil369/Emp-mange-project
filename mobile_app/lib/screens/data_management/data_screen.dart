@@ -410,13 +410,52 @@ class _DataScreenState extends State<DataScreen> {
                                       final provider =
                                           Provider.of<DataProvider>(context,
                                               listen: false);
+                                              
+                                      // Group temp records by taluka and check bundle limits
+                                      Map<String, int> recordsByTaluka = {};
+                                      for (var record in _tempRecords) {
+                                        final taluka = record['Taluka'];
+                                        recordsByTaluka[taluka] = (recordsByTaluka[taluka] ?? 0) + 1;
+                                      }
+
+                                      // Check each bundle's capacity
+                                      List<String> completedTalukas = [];
+                                      for (var bundle in provider.serverBundles) {
+                                        final taluka = bundle['taluka'];
+                                        final currentCount = bundle['count'] ?? 0;
+                                        final newRecords = recordsByTaluka[taluka] ?? 0;
+                                        
+                                        if (currentCount + newRecords >= 250) {
+                                          completedTalukas.add(taluka);
+                                          
+                                          // Send completion notification to server
+                                          await provider.completeBundleForTaluka(taluka);
+                                        }
+                                      }
+
+                                      // Show completion dialog if any bundles are completed
+                                      if (completedTalukas.isNotEmpty) {
+                                        await showDialog(
+                                          context: context,
+                                          builder: (context) => AlertDialog(
+                                            title: const Text('Bundle Limit Reached'),
+                                            content: Text(
+                                              'The following talukas have reached their bundle limit of 250 records:\n\n${completedTalukas.join("\n")}\n\nPlease request new bundles for these talukas.',
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                child: const Text('OK'),
+                                                onPressed: () => Navigator.pop(context),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }
+
                                       final success =
                                           await provider.syncRecordsToServer();
 
                                       if (success) {
-                                        // Remove this line - count is already incremented during ID generation
-                                        // await dataProvider.incrementBundleCount(_selectedRecord!['taluka']);
-
                                         final recordCount = _tempRecords.length;
                                         setState(() {
                                           _tempRecords = [];
@@ -755,17 +794,60 @@ class _DataScreenState extends State<DataScreen> {
             itemBuilder: (context, index) {
               final bundle = bundles[index];
               final count = bundle['count'] ?? 0; // Handle null count
+              final isCompleted = count >= 250;
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                color: isCompleted ? Colors.grey[200] : Colors.white,
                 child: ListTile(
-                  title: Text('Bundle #${bundle['bundleNo']}'),
+                  title: Text(
+                    'Bundle #${bundle['bundleNo']}',
+                    style: TextStyle(
+                      color: isCompleted ? Colors.grey[600] : Colors.black,
+                    ),
+                  ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Taluka: ${bundle['taluka']}'),
-                      Text('Count: $count'), // Use the safe count variable
+                      Text(
+                        'Taluka: ${bundle['taluka']}',
+                        style: TextStyle(
+                          color: isCompleted ? Colors.grey[600] : Colors.black87,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            'Count: $count',
+                            style: TextStyle(
+                              color: isCompleted ? Colors.grey[600] : Colors.black87,
+                            ),
+                          ),
+                          if (isCompleted)
+                            Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[400],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'COMPLETED',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                       if (bundle['assignedAt'] != null)
-                        Text('Assigned: ${bundle['assignedAt']}'),
+                        Text(
+                          'Assigned: ${bundle['assignedAt']}',
+                          style: TextStyle(
+                            color: isCompleted ? Colors.grey[600] : Colors.black87,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -805,11 +887,11 @@ class _DataScreenState extends State<DataScreen> {
   Widget _buildRecordDetails() {
     final record = _selectedRecord!;
     final fields = [
-      {'label': 'UniqueId', 'key': 'UniqueId'},
-      {'label': 'Correction Details', 'key': 'Correction Details'},
-      {'label': 'Crop Name', 'key': 'Crop Name'},
       {'label': 'Farmer Name', 'key': 'Farmer Name'},
+      {'label': 'Crop Name', 'key': 'Crop Name'},
       {'label': 'Intimation No', 'key': 'Intimation No'},
+      {'label': 'Correction Details', 'key': 'Correction Details'},
+      {'label': 'UniqueId', 'key': 'UniqueId'},
       {'label': 'PDF Required', 'key': 'PDF Required'},
       {'label': 'Search from', 'key': 'Search from'},
       {'label': 'Taluka', 'key': 'Taluka'},
@@ -904,6 +986,24 @@ class _DataScreenState extends State<DataScreen> {
                         try {
                           final provider =
                               Provider.of<DataProvider>(context, listen: false);
+                          
+                          // Check if bundle is available for this taluka
+                          final taluka = _selectedRecord!['Taluka'];
+                          final bundle = provider.serverBundles.firstWhere(
+                            (b) => b['taluka'] == taluka && (b['count'] ?? 0) < 250,
+                            orElse: () => {},
+                          );
+
+                          if (bundle.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('No available bundle found for this taluka. Please request a new bundle.'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+
                           final uniqueId =
                               await provider.generateUniqueId(_selectedRecord!);
 
@@ -914,7 +1014,6 @@ class _DataScreenState extends State<DataScreen> {
                                   ..['UniqueId'] = uniqueId;
                           });
 
-                          // No need for fetchAndSyncBundles - count is already updated locally
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Unique ID generated: $uniqueId'),

@@ -8,6 +8,9 @@ import '../api/api_service.dart';
 import '../helpers/database_helper.dart';
 import '../models/member_model.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DataProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -16,7 +19,6 @@ class DataProvider with ChangeNotifier {
   // Configuration data structure
   List<Map<String, dynamic>> _fullLocationData = [];
   String? _selectedDistrictSlug;
-
   // Getters
   List<Map<String, String>> get districts {
     if (_fullLocationData.isEmpty) return [];
@@ -49,6 +51,9 @@ class DataProvider with ChangeNotifier {
 
     return List<String>.from(selected['talukas'] ?? []);
   }
+
+  final String _baseUrl = dotenv.env['VITE_API_BASE_URL'] ??
+      'https://emp-mange-project.onrender.com/api/data';
 
   bool _isLoadingConfig = false;
   bool _isAssigningBundle = false;
@@ -414,6 +419,25 @@ class DataProvider with ChangeNotifier {
     'Phulambri': 'PH',
     'Soegaon': 'SO',
   };
+
+  Future<void> completeBundleForTaluka(String taluka) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/data/bundles/complete'),
+        body: {'taluka': taluka},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to mark bundle as complete');
+      }
+
+      // Update local bundle status
+      await refreshLocalBundles();
+    } catch (e) {
+      print('Error completing bundle: $e');
+      rethrow;
+    }
+  }
 
   Future<void> incrementBundleCount(String taluka) async {
     try {

@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite/sqflite.dart';
-import '../models/member_model.dart';
+// import '../models/member_model.dart';
 import 'dart:convert';
 
 // Custom exception for database-related errors
