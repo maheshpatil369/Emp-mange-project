@@ -177,7 +177,8 @@ class DataProvider with ChangeNotifier {
         final bundleNo = serverBundle['bundleNo'];
         final bundleTaluka = serverBundle['taluka'] ?? '';
         if (localBundlesMap.containsKey(bundleNo) &&
-            localBundlesMap[bundleNo]['taluka'] == bundleTaluka) {
+            localBundlesMap[bundleNo] != null &&
+            localBundlesMap[bundleNo]?['taluka'] == bundleTaluka) {
           bundlesToUpdate.add(serverBundle);
         } else {
           bundlesToAdd.add(serverBundle);
