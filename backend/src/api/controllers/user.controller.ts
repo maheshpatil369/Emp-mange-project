@@ -93,3 +93,23 @@ export const deleteUser = async (
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
+
+export const getMe = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    // The user's ID is attached to the request by the isAuthenticated middleware
+    const userId = req.user?.uid;
+    if (!userId) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const user = await firebaseService.getUserFromDB(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    return res.status(200).json(user);
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
