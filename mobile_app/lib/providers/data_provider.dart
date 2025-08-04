@@ -65,17 +65,12 @@ class DataProvider with ChangeNotifier {
   bool get isAssigningBundle => _isAssigningBundle;
   bool get isLoadingBundles => _isLoadingBundles;
   bool get isOffline => _isOffline;
+  List<Map<String, dynamic>> get fullLocationData => _fullLocationData;
 
   // Modify the constructor to print database path
   DataProvider() {
     loadConfig();
     // fetchLocalData();
-  }
-
-  // Method to be called from the UI when a district is selected
-  void selectDistrict(String? districtSlug) {
-    _selectedDistrictSlug = districtSlug;
-    notifyListeners();
   }
 
   // To correctly process the API response
@@ -145,6 +140,17 @@ class DataProvider with ChangeNotifier {
           throw TimeoutException('Server request timed out');
         },
       );
+
+      // If response only contains a 'message', treat as no bundles
+      if (serverResponse.containsKey('message') && serverResponse.length == 1) {
+        print('No active bundles for user.');
+        _serverBundles = [];
+        _isOffline = false;
+        _isLoadingBundles = false;
+        notifyListeners();
+        return;
+      }
+
       final serverBundlesList = serverResponse.values
           .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
           .toList();
@@ -163,6 +169,7 @@ class DataProvider with ChangeNotifier {
 
       // Check server bundles against local ones
       for (var serverBundle in serverBundlesList) {
+        print('Processing server bundle: ${serverBundle['bundleNo']}');
         final bundleNo = serverBundle['bundleNo'];
         if (localBundlesMap.containsKey(bundleNo)) {
           bundlesToUpdate.add(serverBundle);
@@ -212,6 +219,18 @@ class DataProvider with ChangeNotifier {
     await fetchAndSyncBundles();
   }
 
+  Future<void> deleteAllLocalBundles() async {
+    try {
+      final db = await _databaseHelper.database;
+      await db
+          .delete('bundles'); // Replace 'bundles' with your actual table name
+      print('All bundles deleted from local database.');
+      notifyListeners();
+    } catch (e) {
+      print('Error deleting bundles: $e');
+    }
+  }
+
   // Method to assign work bundle and store locally
   Future<String> assignWorkBundle(String taluka) async {
     _isAssigningBundle = true;
@@ -228,6 +247,7 @@ class DataProvider with ChangeNotifier {
       }
 
       // Check if a bundle for this taluka already exists
+      print("Checking if bundle exists for taluka: $cleanTaluka");
       if (await _apiService
           .fetchActiveBundles()
           .then((bundles) => bundles.containsKey(cleanTaluka))) {
@@ -347,38 +367,66 @@ class DataProvider with ChangeNotifier {
 
   // Hardcoded mappings for location and taluka abbreviations
   static const Map<String, String> _locationAbbreviations = {
-    'ahilyanagar': 'AN',
-    'chhatrapati-sambhajinagar': 'CS',
+    'ahilyanagar': 'An',
+    'chhatrapati-sambhajinagar': 'Cs',
   };
 
   static const Map<String, String> _talukaAbbreviations = {
     // Ahilyanagar talukas
-    'Ahmednagar': 'AH',
-    'Jamkhed': 'JA',
-    'Karjat': 'KA',
-    'Kopargaon': 'KO',
-    'Nevasa': 'NE',
-    'Parner': 'PA',
-    'Pathardi': 'PT',
-    'Rahata': 'RA',
-    'Rahuri': 'RH',
-    'Sangamner': 'SA',
-    'Shevgaon': 'SH',
-    'Shirdi': 'SI',
-    'Shrigonda': 'SR',
-    'Akole': 'AK',
+    'Ahmednagar': 'Ah',
+    'Jamkhed': 'Ja',
+    'Karjat': 'Ka',
+    'Kopargaon': 'Ko',
+    'Nevasa': 'Ne',
+    'Parner': 'Pa',
+    'Pathardi': 'Pt',
+    'Rahata': 'Ra',
+    'Rahuri': 'Rh',
+    'Sangamner': 'Sa',
+    'Shevgaon': 'Sh',
+    'Shirdi': 'Si',
+    'Shrigonda': 'Sr',
+    'Akole': 'Ak',
 
     // Chhatrapati Sambhajinagar talukas
-    'Aurangabad': 'AU',
-    'Gangapur': 'GA',
-    'Kannad': 'KN',
-    'Khultabad': 'KH',
-    'Paithan': 'PA',
-    'Sillod': 'SI',
-    'Vaijapur': 'VA',
-    'Phulambri': 'PH',
-    'Soegaon': 'SO',
+    'Aurangabad': 'Au',
+    'Gangapur': 'Ga',
+    'Kannad': 'Kn',
+    'Khultabad': 'Kh',
+    'Paithan': 'Pa',
+    'Sillod': 'Si',
+    'Vaijapur': 'Va',
+    'Phulambri': 'Ph',
+    'Soegaon': 'So',
   };
+
+  Future<void> incrementBundleCount(String taluka) async {
+    try {
+      // Get the bundle for the given taluka
+      final db = await _databaseHelper.database;
+      final result = await db.query(
+        'bundles',
+        where: 'taluka = ?',
+        whereArgs: [taluka],
+        limit: 1,
+      );
+      if (result.isNotEmpty) {
+        final bundle = result.first;
+        final newCount = ((bundle['count'] ?? 0) as int) + 1;
+        await db.update(
+          'bundles',
+          {'count': newCount},
+          where: 'bundleNo = ?',
+          whereArgs: [bundle['bundleNo']],
+        );
+        print(
+            'Bundle count incremented for taluka: $taluka, new count: $newCount');
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error incrementing bundle count: $e');
+    }
+  }
 
   // Generate unique ID for a record
   Future<String> generateUniqueId(Map<String, dynamic> record) async {
@@ -415,8 +463,7 @@ class DataProvider with ChangeNotifier {
       }
 
       // Find next sequence number for this taluka
-      final nextSequence =
-          await _getNextSequenceNumber(locationAbbr, talukaAbbr);
+      final nextSequence = await _getNextSequenceNumber(talukaAbbr);
 
       // Generate unique ID
       final uniqueId = '$locationAbbr$talukaAbbr$nextSequence';
@@ -439,83 +486,22 @@ class DataProvider with ChangeNotifier {
   }
 
   // Get next sequence number for a specific taluka
-  Future<int> _getNextSequenceNumber(
-      String locationAbbr, String talukaAbbr) async {
-    try {
-      print(
-          '=== DEBUG: Getting next sequence for $locationAbbr$talukaAbbr ===');
-
-      // Get all existing records from local database
-      final allRecords = await _databaseHelper.getAllRawRecords();
-      print('DEBUG: Found ${allRecords.length} records in raw_records table');
-
-      // Get all records from temporary sync table
-      final tempRecords = await _databaseHelper.getRecordsToSync();
-      print(
-          'DEBUG: Found ${tempRecords.length} records in records_to_sync table');
-
-      // Filter records that have the same location and taluka pattern
-      final pattern = RegExp('^$locationAbbr$talukaAbbr\\d+\$');
-      final existingIds = <int>{};
-
-      // Check records in raw_records table
-      for (final record in allRecords) {
-        final recordData =
-            json.decode(record['data'] as String) as Map<String, dynamic>;
-        final uniqueId = recordData['UniqueId']?.toString();
-
-        if (uniqueId != null && pattern.hasMatch(uniqueId)) {
-          // Extract sequence number from existing ID
-          final sequenceStr = uniqueId.substring(4); // Remove XXYY part
-          final sequence = int.tryParse(sequenceStr);
-          if (sequence != null) {
-            existingIds.add(sequence);
-            print(
-                'DEBUG: Found existing ID in raw_records: $uniqueId (sequence: $sequence)');
-          }
-        }
-      }
-
-      // Check records in records_to_sync table
-      for (final record in tempRecords) {
-        final uniqueId = record['UniqueId']?.toString();
-
-        if (uniqueId != null && pattern.hasMatch(uniqueId)) {
-          // Extract sequence number from existing ID
-          final sequenceStr = uniqueId.substring(4); // Remove XXYY part
-          final sequence = int.tryParse(sequenceStr);
-          if (sequence != null) {
-            existingIds.add(sequence);
-            print(
-                'DEBUG: Found existing ID in records_to_sync: $uniqueId (sequence: $sequence)');
-          }
-        }
-      }
-
-      final sortedIds = existingIds.toList()..sort();
-      print('DEBUG: All existing sequences (unique): $sortedIds');
-
-      // Find next available sequence number
-      if (sortedIds.isEmpty) {
-        print('DEBUG: No existing sequences found, returning 1');
-        return 1;
-      }
-
-      int nextSequence = 1;
-
-      for (final existingSequence in sortedIds) {
-        if (existingSequence == nextSequence) {
-          nextSequence++;
-        } else {
-          break;
-        }
-      }
-
-      print('DEBUG: Next available sequence: $nextSequence');
-      return nextSequence;
-    } catch (e) {
-      print('Error getting next sequence number: $e');
-      return 1; // Default to 1 if error occurs
+  Future<int> _getNextSequenceNumber(String taluka) async {
+    final db = await _databaseHelper.database;
+    final result = await db.query(
+      'bundles',
+      where: 'taluka = ?',
+      whereArgs: [taluka],
+      limit: 1,
+    );
+    if (result.isNotEmpty) {
+      final bundle = result.first;
+      final bundleNo = (bundle['bundleNo'] ?? 1) as int;
+      final count = (bundle['count'] ?? 0) as int;
+      // Sequence number logic: (bundleNo - 1) * 250 + count
+      return (bundleNo - 1) * 250 + count;
+    } else {
+      throw Exception('No bundle found for taluka: $taluka');
     }
   }
 

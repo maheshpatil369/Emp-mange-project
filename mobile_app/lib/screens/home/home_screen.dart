@@ -82,7 +82,26 @@ class _HomeScreenState extends State<HomeScreen> {
           bool isOffline = dataProvider.errorMessage != null &&
               dataProvider.districts.isEmpty;
 
-          List<String> availableTalukas = dataProvider.filteredTalukas;
+          // List<String> availableTalukas = dataProvider.filteredTalukas;
+          String? userDistrictSlug;
+          if (_userDistrict != null) {
+            // Find the slug for the user's district
+            final district = dataProvider.districts.firstWhere(
+              (d) => d['name']?.toLowerCase() == _userDistrict!.toLowerCase(),
+              orElse: () => {},
+            );
+            userDistrictSlug = district['slug'];
+          }
+
+          // Get talukas for the user's district only
+          List<String> availableTalukas = [];
+          if (userDistrictSlug != null) {
+            final location = dataProvider.fullLocationData.firstWhere(
+              (loc) => loc['slug'] == userDistrictSlug,
+              orElse: () => {},
+            );
+            availableTalukas = List<String>.from(location['talukas'] ?? []);
+          }
 
           return Padding(
             padding: const EdgeInsets.all(16.0),

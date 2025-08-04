@@ -473,7 +473,7 @@ class _DataScreenState extends State<DataScreen> {
               left: 0,
               right: 0,
               child: Container(
-                height: 400, // Fixed height to prevent overflow
+                height: 605, // Fixed height to prevent overflow
                 margin: const EdgeInsets.all(16.0),
                 padding: const EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
@@ -834,6 +834,10 @@ class _DataScreenState extends State<DataScreen> {
 
                       if (success) {
                         await _loadTempRecords(); // Refresh temp records list
+                        final dataProvider =
+                            Provider.of<DataProvider>(context, listen: false);
+                        await dataProvider
+                            .incrementBundleCount(_selectedRecord!['taluka']);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Record saved to temporary storage!'),

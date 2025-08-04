@@ -118,8 +118,19 @@ void main() async {
       print('Android SQLite initialization error: $e');
     }
   }
+  // Initialize AuthProvider and load user from prefs
+  final authProvider = AuthProvider();
+  await authProvider.checkLoginStatus();
 
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+        ChangeNotifierProvider(create: (context) => DataProvider()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -127,33 +138,26 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (context) => AuthProvider()),
-        ChangeNotifierProvider(create: (context) => DataProvider()),
-      ],
-      child: MaterialApp(
-        title: 'Data Management App',
+    return Consumer<AuthProvider>(builder: (context, authProvider, child) {
+      if (authProvider.isLoading) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      return MaterialApp(
+        title: 'Employee Management App',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primarySwatch: Colors.blue,
         ),
-        home: Consumer<AuthProvider>(
-          builder: (context, authProvider, child) {
-            if (authProvider.isAuthenticated) {
-              return const MainNavigationScreen();
-            } else {
-              return const LoginScreen();
-            }
-          },
-        ),
+        home: authProvider.isAuthenticated
+            ? const MainNavigationScreen()
+            : const LoginScreen(),
         routes: {
           '/login': (context) => const LoginScreen(),
           '/home': (context) => const MainNavigationScreen(),
           '/profile': (context) => const ProfileScreen(),
           '/data_management': (context) => const DataScreen(),
         },
-      ),
-    );
+      );
+    });
   }
 }

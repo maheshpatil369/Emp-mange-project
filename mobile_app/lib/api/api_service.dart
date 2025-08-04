@@ -26,8 +26,11 @@ class ApiService {
       if (responseBody['token'] != null) {
         final token = responseBody['token'];
         final prefs = await SharedPreferences.getInstance();
+        final user = responseBody['user']['displayName'];
+        final email = responseBody['user']['email'];
         await prefs.setString('token', token);
-        print('Login successful, token saved: $token'); // Debugging print
+        await prefs.setString('email', email); // Save email for future use
+        await prefs.setString('name', user); // Save user name
         return token;
       } else {
         print(
