@@ -46,6 +46,7 @@ export async function createUserInDB(userData: Omit<User, "id">) {
     location: userData.location,
     role: userData.role,
     excelFile: userData.excelFile || null,
+    canDownloadFiles: true,
   };
 
   await userProfileRef.set(profileData);
@@ -107,6 +108,17 @@ export async function updateUserInDB(userId: string, updates: Partial<User>) {
     displayName: updates.name,
   });
 }
+
+
+export const updateUserPermission = async (
+  userId: string,
+  canDownload: boolean
+): Promise<void> => {
+  const db = admin.database();
+  const userProfileRef = db.ref(`users/${userId}`);
+  await userProfileRef.update({ canDownloadFiles: canDownload });
+};
+
 
 export async function deleteUserInDB(userId: string) {
   // 1. Delete from Firebase Authentication

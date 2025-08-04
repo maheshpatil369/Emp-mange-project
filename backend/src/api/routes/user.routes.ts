@@ -5,6 +5,7 @@ import {
   updateUser,
   deleteUser,
   getMe,
+  updateUserPermissions,
 } from "../controllers/user.controller";
 import { isAuthenticated, isAdmin } from "../middleware/auth.middleware";
 
@@ -21,6 +22,7 @@ router.post("/", isAuthenticated, isAdmin, createUser);
 
 // Update a user.
 router.put("/:id", isAuthenticated, isAdmin, updateUser);
+router.put('/:userId/permissions', isAdmin, updateUserPermissions);
 
 // Delete a user.
 router.delete("/:id", isAuthenticated, isAdmin, deleteUser);

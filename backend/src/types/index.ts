@@ -9,6 +9,7 @@ export interface User {
   location: string;
   role: "Admin" | "User";
   excelFile?: string;
+  canDownloadFiles?: boolean;
 }
 
 // Defines the structure of an active bundle in /userStates

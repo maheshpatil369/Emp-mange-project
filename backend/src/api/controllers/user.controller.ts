@@ -77,6 +77,23 @@ export const updateUser = async (
   }
 };
 
+export const updateUserPermissions = async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const { canDownload } = req.body;
+
+  if (typeof canDownload !== 'boolean') {
+    return res.status(400).json({ message: 'Invalid "canDownload" value. It must be a boolean.' });
+  }
+
+  try {
+    await firebaseService.updateUserPermission(userId as string, canDownload);
+    res.status(200).json({ message: 'User permissions updated successfully.' });
+  } catch (error) {
+    console.error('Error updating user permissions:', error);
+    res.status(500).json({ message: 'Failed to update user permissions.' });
+  }
+};
+
 // NEW: Controller to delete a user.
 export const deleteUser = async (
   req: Request,

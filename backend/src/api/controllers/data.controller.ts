@@ -179,12 +179,10 @@ export const syncRecords = async (
       !Array.isArray(records) ||
       records.length === 0
     ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            'Bad Request: "taluka", "bundleNo", "sourceFile", and a non-empty "records" array are required.',
-        });
+      return res.status(400).json({
+        message:
+          'Bad Request: "taluka", "bundleNo", "sourceFile", and a non-empty "records" array are required.',
+      });
     }
 
     const user = await firebaseService.getUserFromDB(userId);
@@ -297,11 +295,9 @@ export const getFileById = async (
     );
 
     if (!file) {
-      return res
-        .status(404)
-        .json({
-          message: `File with ID ${fileId} not found in location ${location}.`,
-        });
+      return res.status(404).json({
+        message: `File with ID ${fileId} not found in location ${location}.`,
+      });
     }
 
     return res.status(200).json(file);
@@ -310,8 +306,6 @@ export const getFileById = async (
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
-
 
 /**
  * Controller to get the application configuration (locations, talukas).
@@ -332,90 +326,130 @@ export const getConfig = async (
   }
 };
 
-
 /**
  * Controller for a user to fetch their assigned raw data file.
  */
-export const getAssignedFile = async (req: Request, res: Response): Promise<Response> => {
-    try {
-        const userId = req.user!.uid;
-        const fileContent = await firebaseService.getAssignedFileContentFromDB(userId);
-        if (fileContent === null) {
-            return res.status(404).json({ message: 'Assigned file not found for this user.' });
-        }
-        return res.status(200).json(fileContent);
-    } catch (error: any) {
-        console.error('Error fetching assigned file:', error);
-        return res.status(500).json({ message: error.message || 'Internal Server Error' });
+export const getAssignedFile = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const userId = req.user!.uid;
+    const user = await firebaseService.getUserFromDB(userId);
+
+    const fileContent = await firebaseService.getAssignedFileContentFromDB(
+      userId
+    );
+    
+    if (!user || user.canDownloadFiles === false) {
+      return res
+        .status(403)
+        .json({ message: "You do not have permission to download files." });
     }
+
+    if (fileContent === null) {
+      return res
+        .status(404)
+        .json({ message: "Assigned file not found for this user." });
+    }
+    return res.status(200).json(fileContent);
+  } catch (error: any) {
+    console.error("Error fetching assigned file:", error);
+    return res
+      .status(500)
+      .json({ message: error.message || "Internal Server Error" });
+  }
 };
-
-
 
 /**
  * Controller to search for a raw record by its 'Search from' ID.
  */
-export const searchRecord = async (req: Request, res: Response): Promise<Response> => {
-    try {
-        const userId = req.user!.uid;
-        const { searchId } = req.query;
+export const searchRecord = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const userId = req.user!.uid;
+    const { searchId } = req.query;
 
-        if (!searchId) {
-            return res.status(400).json({ message: 'Bad Request: "searchId" query parameter is required.' });
-        }
-
-        const record = await firebaseService.searchRawRecordFromDB(userId, searchId as string);
-        if (!record) {
-            return res.status(404).json({ message: `Record with Search ID "${searchId}" not found in your assigned file.` });
-        }
-        return res.status(200).json(record);
-    } catch (error: any) {
-        console.error('Error searching record:', error);
-        return res.status(500).json({ message: error.message || 'Internal Server Error' });
+    if (!searchId) {
+      return res.status(400).json({
+        message: 'Bad Request: "searchId" query parameter is required.',
+      });
     }
+
+    const record = await firebaseService.searchRawRecordFromDB(
+      userId,
+      searchId as string
+    );
+    if (!record) {
+      return res.status(404).json({
+        message: `Record with Search ID "${searchId}" not found in your assigned file.`,
+      });
+    }
+    return res.status(200).json(record);
+  } catch (error: any) {
+    console.error("Error searching record:", error);
+    return res
+      .status(500)
+      .json({ message: error.message || "Internal Server Error" });
+  }
 };
-
-
 
 /**
  * Controller to generate the next unique ID for a record.
  */
-export const getNextUniqueId = async (req: Request, res: Response): Promise<Response> => {
-    try {
-        const userId = req.user!.uid;
-        const { taluka } = req.query;
+export const getNextUniqueId = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const userId = req.user!.uid;
+    const { taluka } = req.query;
 
-        if (!taluka) {
-            return res.status(400).json({ message: 'Bad Request: "taluka" query parameter is required.' });
-        }
-
-        const user = await firebaseService.getUserFromDB(userId);
-        if (!user || !user.location) {
-            return res.status(404).json({ message: 'User profile or location not found.' });
-        }
-
-        const uniqueId = await firebaseService.getNextUniqueIdFromDB(user.location, taluka as string);
-        return res.status(200).json({ uniqueId });
-    } catch (error: any) {
-        console.error('Error generating next unique ID:', error);
-        return res.status(500).json({ message: 'Internal Server Error' });
+    if (!taluka) {
+      return res.status(400).json({
+        message: 'Bad Request: "taluka" query parameter is required.',
+      });
     }
-};
 
+    const user = await firebaseService.getUserFromDB(userId);
+    if (!user || !user.location) {
+      return res
+        .status(404)
+        .json({ message: "User profile or location not found." });
+    }
+
+    const uniqueId = await firebaseService.getNextUniqueIdFromDB(
+      user.location,
+      taluka as string
+    );
+    return res.status(200).json({ uniqueId });
+  } catch (error: any) {
+    console.error("Error generating next unique ID:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
 
 /**
  * Controller to delete an uploaded file record.
  */
-export const deleteFile = async (req: Request, res: Response): Promise<Response> => {
-    try {
-        const { location, fileId } = req.params;
-        await firebaseService.deleteFileFromDB(location as string, fileId as string);
-        return res.status(200).json({ message: 'File deleted successfully.' });
-    } catch (error: any) {
-        if (error.message.includes('not found')) {
-            return res.status(404).json({ message: error.message });
-        }
-        console.error('Error deleting file:', error);
-        return res.status(500).json({ message: 'Internal Server Error' });
+export const deleteFile = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { location, fileId } = req.params;
+    await firebaseService.deleteFileFromDB(
+      location as string,
+      fileId as string
+    );
+    return res.status(200).json({ message: "File deleted successfully." });
+  } catch (error: any) {
+    if (error.message.includes("not found")) {
+      return res.status(404).json({ message: error.message });
     }
+    console.error("Error deleting file:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
 };
