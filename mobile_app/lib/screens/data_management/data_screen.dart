@@ -312,50 +312,89 @@ class _DataScreenState extends State<DataScreen> {
                               backgroundColor: Colors.orange,
                               foregroundColor: Colors.white,
                             ),
-                            onPressed: _tempRecords.isNotEmpty
-                                ? () async {
-                                    try {
-                                      final provider =
-                                          Provider.of<DataProvider>(context,
-                                              listen: false);
-                                      final success =
-                                          await provider.emptyTempTable();
+                            onPressed: () async {
+                              // Show confirmation popup
+                              bool? confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (context) {
+                                  return AlertDialog(
+                                    title: const Text('Are you sure?'),
+                                    content: const Text(
+                                        'Do you want to empty the temporary table?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false), // No
+                                        child: const Text('No'),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true), // Yes
+                                        style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red),
+                                        child: const Text('Yes'),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
 
-                                      if (success) {
-                                        setState(() {
-                                          _tempRecords = [];
-                                          _showTempRecords = false;
-                                        });
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                                'Temporary table emptied successfully!'),
-                                            backgroundColor: Colors.orange,
-                                          ),
-                                        );
-                                      } else {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                                'Failed to empty temporary table.'),
-                                            backgroundColor: Colors.red,
-                                          ),
-                                        );
-                                      }
-                                    } catch (e) {
+                              // If user confirms
+                              if (confirmed == true) {
+                                print('User confirmed! Running next logic...');
+                                if (_tempRecords.isNotEmpty) {
+                                  try {
+                                    final provider = Provider.of<DataProvider>(
+                                        context,
+                                        listen: false);
+                                    final success =
+                                        await provider.emptyTempTable();
+
+                                    if (success) {
+                                      setState(() {
+                                        _tempRecords = [];
+                                        _showTempRecords = false;
+                                      });
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
-                                        SnackBar(
+                                        const SnackBar(
                                           content: Text(
-                                              'Error emptying temp table: $e'),
+                                              'Temporary table emptied successfully!'),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                              'Failed to empty temporary table.'),
                                           backgroundColor: Colors.red,
                                         ),
                                       );
                                     }
+                                  } catch (e) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                            'Error emptying temp table: $e'),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
                                   }
-                                : null,
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                          'No temporary records to delete.'),
+                                      backgroundColor: Colors.blue,
+                                    ),
+                                  );
+                                }
+                              } else {
+                                print('User cancelled the action.');
+                              }
+                            },
                           ),
                           const SizedBox(width: 12), // spacing between buttons
                           ElevatedButton.icon(
@@ -453,20 +492,63 @@ class _DataScreenState extends State<DataScreen> {
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () async {
-                        final provider =
-                            Provider.of<DataProvider>(context, listen: false);
-                        await provider.deleteAllLocalRecords();
-                        setState(() {
-                          _searchResults = [];
-                          _selectedRecord = null;
-                          _isUniqueIdGenerated = false;
-                        });
-                        setState(() {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content: Text('All local records deleted!')),
-                          );
-                        });
+                        // Show confirmation dialog
+                        bool? confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) {
+                            return AlertDialog(
+                              title: const Text('Are you sure?'),
+                              content: const Text(
+                                  'Do you really want to delete all local records? This action cannot be undone.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false), // Cancel
+                                  child: const Text('No'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, true), // Confirm
+                                  style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red),
+                                  child: const Text('Yes'),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+
+                        if (confirmed == true) {
+                          try {
+                            final provider = Provider.of<DataProvider>(context,
+                                listen: false);
+                            await provider.deleteAllLocalRecords();
+
+                            setState(() {
+                              _searchResults = [];
+                              _selectedRecord = null;
+                              _isUniqueIdGenerated = false;
+                            });
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'All local records deleted successfully!'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content:
+                                    Text('Error deleting local records: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        } else {
+                          print('User cancelled deleting all local records.');
+                        }
                       },
                     ),
                   ),
