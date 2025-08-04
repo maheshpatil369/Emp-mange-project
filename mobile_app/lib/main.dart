@@ -143,7 +143,7 @@ class MyApp extends StatelessWidget {
         return const Center(child: CircularProgressIndicator());
       }
       return MaterialApp(
-        title: 'Employee Management App',
+        title: 'Data Management App',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primarySwatch: Colors.blue,
