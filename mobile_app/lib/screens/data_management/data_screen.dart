@@ -20,6 +20,7 @@ class _DataScreenState extends State<DataScreen> {
   bool _isSearching = false;
   Map<String, dynamic>? _selectedRecord;
   bool _isUniqueIdGenerated = false;
+  bool _isLoadingRecords = false;
   List<Map<String, dynamic>> _tempRecords = [];
   bool _showTempRecords = false;
 
@@ -284,16 +285,24 @@ class _DataScreenState extends State<DataScreen> {
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
                             ),
-                            onPressed: () async {
-                              final provider = Provider.of<DataProvider>(
-                                  context,
-                                  listen: false);
-                              final result = await provider
-                                  .downloadAndStoreAssignedRecords();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(result)),
-                              );
-                            },
+                            onPressed: _isLoadingRecords
+                                ? null
+                                : () async {
+                                    setState(() {
+                                      _isLoadingRecords = true;
+                                    });
+                                    final provider = Provider.of<DataProvider>(
+                                        context,
+                                        listen: false);
+                                    final result = await provider
+                                        .downloadAndStoreAssignedRecords();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(result)),
+                                    );
+                                    setState(() {
+                                      _isLoadingRecords = false;
+                                    });
+                                  },
                           ),
                           const SizedBox(width: 12), // spacing between buttons
                           ElevatedButton.icon(
@@ -447,7 +456,17 @@ class _DataScreenState extends State<DataScreen> {
                         final provider =
                             Provider.of<DataProvider>(context, listen: false);
                         await provider.deleteAllLocalRecords();
-                        setState(() {});
+                        setState(() {
+                          _searchResults = [];
+                          _selectedRecord = null;
+                          _isUniqueIdGenerated = false;
+                        });
+                        setState(() {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                                content: Text('All local records deleted!')),
+                          );
+                        });
                       },
                     ),
                   ),

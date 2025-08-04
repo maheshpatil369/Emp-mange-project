@@ -473,7 +473,7 @@ class DataProvider with ChangeNotifier {
       }
 
       // Find next sequence number for this taluka
-      final nextSequence = await _getNextSequenceNumber(talukaAbbr);
+      final nextSequence = await _getNextSequenceNumber(talukaName);
 
       // Generate unique ID
       final uniqueId = '$locationAbbr$talukaAbbr$nextSequence';
