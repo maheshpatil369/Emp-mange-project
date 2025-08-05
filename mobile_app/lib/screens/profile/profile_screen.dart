@@ -86,17 +86,45 @@ class ProfileScreen extends StatelessWidget {
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    // Get DataProvider to clear user-specific data
-                    final dataProvider =
-                        Provider.of<DataProvider>(context, listen: false);
+                    // Show loading indicator
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
 
-                    // Clear user-specific data first
-                    await dataProvider.clearUserData();
+                    try {
+                      // Get DataProvider to save current state before clearing
+                      final dataProvider =
+                          Provider.of<DataProvider>(context, listen: false);
 
-                    // Then sign out from auth
-                    await authProvider.signOut();
+                      // CRITICAL: Save current bundles AND records state to SharedPreferences BEFORE clearing
+                      await dataProvider.saveDataBeforeLogout();
 
-                    Navigator.of(context).pushReplacementNamed('/login');
+                      // Then clear only runtime data (not SharedPreferences)
+                      await dataProvider.clearRuntimeUserData();
+
+                      // Then sign out from auth
+                      await authProvider.signOut();
+
+                      // Close loading dialog
+                      Navigator.of(context).pop();
+
+                      Navigator.of(context).pushReplacementNamed('/login');
+                    } catch (e) {
+                      // Close loading dialog
+                      Navigator.of(context).pop();
+
+                      // Show error
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Logout error: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   },
                   icon: const Icon(Icons.logout),
                   label: const Text('Logout'),

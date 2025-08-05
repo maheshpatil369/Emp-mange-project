@@ -126,7 +126,10 @@ void main() async {
   // Only load bundles if user is authenticated
   if (authProvider.isAuthenticated) {
     await dataProvider
-        .loadUserData(); // Use loadUserData instead of loadBundlesFromPrefsAndOverwriteDB
+        .loadUserData(); // This will now load from SharedPreferences with preserved counts
+
+    // Optional: Clean up old user data periodically
+    dataProvider.cleanupOldUserData();
   }
 
   runApp(

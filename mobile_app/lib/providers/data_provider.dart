@@ -905,8 +905,80 @@ class DataProvider with ChangeNotifier {
   //   }
   // }
 
-  // Clear all user-specific data when logging out or switching users
-  Future<void> clearUserData() async {
+  // Save bundles to SharedPreferences before logout (preserve counts)
+  Future<void> saveBundlesBeforeLogout() async {
+    try {
+      print('Saving current bundles state before logout...');
+
+      // Get current bundles with their counts from local database
+      final currentBundles = await _databaseHelper.getActiveLocalBundles();
+
+      if (currentBundles.isNotEmpty) {
+        // Save to SharedPreferences for current user
+        await _saveBundlesToPrefs(currentBundles);
+        print(
+            'Saved ${currentBundles.length} bundles with counts to SharedPreferences before logout');
+      } else {
+        print('No bundles to save before logout');
+      }
+    } catch (e) {
+      print('Error saving bundles before logout: $e');
+    }
+  }
+
+// Save both bundles and records to SharedPreferences before logout
+  Future<void> saveDataBeforeLogout() async {
+    try {
+      print('Saving all user data before logout...');
+
+      // Save bundles (existing logic)
+      await saveBundlesBeforeLogout();
+
+      // Save records (new logic)
+      await saveRecordsBeforeLogout();
+
+      print('All user data saved before logout');
+    } catch (e) {
+      print('Error saving data before logout: $e');
+    }
+  }
+
+// Update clearRuntimeUserData to have option to preserve records in SharedPrefs
+  Future<void> clearRuntimeUserData(
+      {bool preserveRecordsInPrefs = true}) async {
+    try {
+      print('Clearing runtime user data...');
+
+      // Clear bundles from local database
+      await deleteAllLocalBundles();
+
+      // Clear records from local database
+      await deleteAllLocalRecords();
+
+      // Clear temporary sync records
+      await emptyTempTable();
+
+      // Optionally clear old records from SharedPreferences if not preserving
+      if (!preserveRecordsInPrefs) {
+        await clearOldRecordsFromPrefs();
+      }
+
+      // Reset state variables
+      _serverBundles.clear();
+      _records.clear();
+      _errorMessage = null;
+      _isOffline = false;
+
+      notifyListeners();
+      print('Runtime user data cleared successfully.');
+    } catch (e) {
+      print('Error clearing runtime user data: $e');
+    }
+  }
+
+// Clear all user-specific data when logging out or switching users
+// Clear all user-specific data when switching users (not logout)
+  Future<void> clearUserData({bool preserveSharedPrefs = false}) async {
     try {
       print('Clearing all user-specific data...');
 
@@ -922,11 +994,13 @@ class DataProvider with ChangeNotifier {
       // Clear temporary sync records
       await emptyTempTable();
 
-      // Clear ONLY current user's SharedPreferences
-      if (userEmail != null) {
+      // Clear SharedPreferences only if not preserving them
+      if (!preserveSharedPrefs && userEmail != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('activeBundles_$userEmail');
         print('Cleared SharedPreferences for user: $userEmail');
+      } else if (preserveSharedPrefs) {
+        print('Preserved SharedPreferences for user: $userEmail');
       }
 
       // Reset state variables
@@ -942,14 +1016,164 @@ class DataProvider with ChangeNotifier {
     }
   }
 
+  // Save records to SharedPreferences before logout
+  Future<void> saveRecordsBeforeLogout() async {
+    try {
+      print('Saving current records state before logout...');
+
+      // Get current records from local database
+      final currentRecords = await _databaseHelper.getAllRawRecords();
+
+      if (currentRecords.isNotEmpty) {
+        final userEmail = await _getCurrentUserEmail();
+        if (userEmail != null) {
+          final prefs = await SharedPreferences.getInstance();
+
+          // Convert records to JSON string
+          final recordsJson = json.encode(currentRecords.map((record) {
+            // Extract the data from the database format
+            return json.decode(record['data'] as String);
+          }).toList());
+
+          // Save to SharedPreferences with user-specific key
+          await prefs.setString('rawRecords_$userEmail', recordsJson);
+
+          // Also save a timestamp to track when records were saved
+          await prefs.setString(
+              'recordsSavedAt_$userEmail', DateTime.now().toIso8601String());
+
+          print(
+              'Saved ${currentRecords.length} records to SharedPreferences before logout');
+
+          // Log the approximate size for monitoring
+          final sizeInBytes = recordsJson.length;
+          final sizeInKB = (sizeInBytes / 1024).toStringAsFixed(2);
+          print('Records data size: ${sizeInKB}KB');
+
+          // Warn if size is getting large (SharedPreferences has limits)
+          if (sizeInBytes > 1024 * 1024) {
+            // 1MB
+            print(
+                'WARNING: Records data is quite large (${sizeInKB}KB). Consider data cleanup.');
+          }
+        }
+      } else {
+        print('No records to save before logout');
+      }
+    } catch (e) {
+      print('Error saving records before logout: $e');
+      // Don't throw - logout should continue even if record saving fails
+    }
+  }
+
+// Load records from SharedPreferences after login
+  Future<void> loadRecordsFromPrefs() async {
+    try {
+      print('Loading records from SharedPreferences after login...');
+      final userEmail = await _getCurrentUserEmail();
+
+      if (userEmail == null) {
+        print('No user authenticated, skipping record loading');
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final recordsJson = prefs.getString('rawRecords_$userEmail');
+      final savedAtString = prefs.getString('recordsSavedAt_$userEmail');
+
+      if (recordsJson != null) {
+        // Check if we already have records locally
+        final localRecordCount = await getLocalRecordCount();
+
+        if (localRecordCount == 0) {
+          // No local records, restore from SharedPreferences
+          final savedRecords = (json.decode(recordsJson) as List)
+              .map((item) => item as Map<String, dynamic>)
+              .toList();
+
+          await _databaseHelper.insertRawRecords(savedRecords);
+
+          print(
+              'Restored ${savedRecords.length} records from SharedPreferences to local DB');
+
+          if (savedAtString != null) {
+            final savedAt = DateTime.parse(savedAtString);
+            final timeDiff = DateTime.now().difference(savedAt);
+            print('Records were saved ${timeDiff.inMinutes} minutes ago');
+          }
+        } else {
+          print(
+              'Local records already exist (${localRecordCount}), skipping restore from SharedPreferences');
+        }
+      } else {
+        print('No records found in SharedPreferences for user: $userEmail');
+      }
+    } catch (e) {
+      print('Error loading records from SharedPreferences: $e');
+      // Don't throw - app should continue even if record loading fails
+    }
+  }
+
+// Clear old records from SharedPreferences (cleanup method)
+  Future<void> clearOldRecordsFromPrefs() async {
+    try {
+      final userEmail = await _getCurrentUserEmail();
+      if (userEmail != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('rawRecords_$userEmail');
+        await prefs.remove('recordsSavedAt_$userEmail');
+        print(
+            'Cleared old records from SharedPreferences for user: $userEmail');
+      }
+    } catch (e) {
+      print('Error clearing old records from SharedPreferences: $e');
+    }
+  }
+
   // Load user-specific data after login
+// Load user-specific data after login
   Future<void> loadUserData() async {
     try {
       print('Loading user-specific data...');
+
+      // Load bundles first
       await loadBundlesFromPrefs();
+
+      // Load records
+      await loadRecordsFromPrefs();
+
       print('User-specific data loaded successfully.');
     } catch (e) {
       print('Error loading user data: $e');
+    }
+  }
+
+  // Optional: Add this method to manage SharedPreferences size
+  Future<void> cleanupOldUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+
+      // Find old user data (older than 7 days)
+      final cutoffDate = DateTime.now().subtract(const Duration(days: 7));
+
+      for (String key in keys) {
+        if (key.startsWith('recordsSavedAt_')) {
+          final savedAtString = prefs.getString(key);
+          if (savedAtString != null) {
+            final savedAt = DateTime.parse(savedAtString);
+            if (savedAt.isBefore(cutoffDate)) {
+              final userEmail = key.replaceFirst('recordsSavedAt_', '');
+              await prefs.remove('rawRecords_$userEmail');
+              await prefs.remove('recordsSavedAt_$userEmail');
+              await prefs.remove('activeBundles_$userEmail');
+              print('Cleaned up old data for user: $userEmail');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error during cleanup: $e');
     }
   }
 }

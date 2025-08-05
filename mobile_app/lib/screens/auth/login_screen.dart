@@ -160,7 +160,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (authProvider.isAuthenticated) {
         // Load user-specific data after successful login
+        print('Loading user data after successful login...');
         await dataProvider.loadUserData();
+
+        // Also try to sync with server (but preserve local counts)
+        await dataProvider.fetchAndSyncBundles();
+
         Navigator.of(context).pushReplacementNamed('/home');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
