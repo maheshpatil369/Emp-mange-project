@@ -892,14 +892,14 @@ class _DataScreenState extends State<DataScreen> {
       {'label': 'Intimation No', 'key': 'Intimation No'},
       {'label': 'Correction Details', 'key': 'Correction Details'},
       {'label': 'UniqueId', 'key': 'UniqueId'},
-      {'label': 'PDF Required', 'key': 'PDF Required'},
+      {'label': 'PDf Required', 'key': 'PDf Required'},
       {'label': 'Search from', 'key': 'Search from'},
       {'label': 'Taluka', 'key': 'Taluka'},
     ];
 
     return Column(
       children: fields.map((field) {
-        final isPdfRequired = field['key'] == 'PDF Required';
+        final isPdfRequired = field['key'] == 'PDf Required';
         final isSearchFrom = field['key'] == 'Search from';
         final isUniqueId = field['key'] == 'UniqueId';
         String value = record[field['key']]?.toString() ?? '';

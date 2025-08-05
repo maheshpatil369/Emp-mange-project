@@ -589,7 +589,9 @@ class DataProvider with ChangeNotifier {
       final bundleNo = (bundle['bundleNo'] ?? 1) as int;
       final count = (bundle['count'] ?? 0) as int;
       // Sequence number logic: (bundleNo - 1) * 250 + count
-      return (bundleNo - 1) * 250 + count;
+      return (bundleNo - 1) * 250 +
+          count +
+          1; // Increment by 1 for next sequence
     } else {
       throw Exception('No bundle found for taluka: $taluka');
     }

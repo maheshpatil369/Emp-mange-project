@@ -723,7 +723,7 @@ export async function getAnalyticsDataFromDB(filters: {
 
             // Robust matching: find key that includes "pdf required" case-insensitive
             const pdfKey = Object.keys(record).find(
-              (k) => k.trim().toLowerCase() === "pdf required"
+              (k) => k.trim().toLowerCase() === "PDf required"
             );
 
             if (pdfKey) {
@@ -803,7 +803,7 @@ export async function getAnalyticsDataFromDB(filters: {
             const record = processedBundleRecords[recordId];
             if (record && typeof record === "object") {
               const pdfKey = Object.keys(record).find(
-                (k) => k.trim().toLowerCase() === "pdf required"
+                (k) => k.trim().toLowerCase() === "PDf Required"
               );
               if (pdfKey && record[pdfKey].toLowerCase() === "yes") {
                 pdfsRequiredInBundle++;
