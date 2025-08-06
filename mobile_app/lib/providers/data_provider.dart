@@ -578,6 +578,255 @@ class DataProvider with ChangeNotifier {
     }
   }
 
+// 1. First, let's add a method to get the highest sequence number for a taluka
+  Future<int> _getHighestSequenceNumberForTaluka(String taluka) async {
+    try {
+      // Check both temporary records and permanent records for highest sequence
+      final db = await _databaseHelper.database;
+
+      // Get all records for this taluka from temporary sync table
+      final tempRecords = await db.query(
+        'temporary_sync',
+        where: 'json_extract(data, "\$.Taluka") = ?',
+        whereArgs: [taluka],
+      );
+
+      // Get all records for this taluka from raw_records table
+      final rawRecords = await db.query(
+        'raw_records',
+        where:
+            'json_extract(data, "\$.Taluka") = ? AND json_extract(data, "\$.UniqueId") IS NOT NULL',
+        whereArgs: [taluka],
+      );
+
+      int highestSequence = 0;
+
+      // Process temp records
+      for (final record in tempRecords) {
+        try {
+          final data = json.decode(record['data'] as String);
+          final uniqueId = data['UniqueId']?.toString();
+          if (uniqueId != null && uniqueId.isNotEmpty) {
+            final sequence = _extractSequenceFromUniqueId(uniqueId, taluka);
+            if (sequence > highestSequence) {
+              highestSequence = sequence;
+            }
+          }
+        } catch (e) {
+          print('Error processing temp record: $e');
+        }
+      }
+
+      // Process raw records
+      for (final record in rawRecords) {
+        try {
+          final data = json.decode(record['data'] as String);
+          final uniqueId = data['UniqueId']?.toString();
+          if (uniqueId != null && uniqueId.isNotEmpty) {
+            final sequence = _extractSequenceFromUniqueId(uniqueId, taluka);
+            if (sequence > highestSequence) {
+              highestSequence = sequence;
+            }
+          }
+        } catch (e) {
+          print('Error processing raw record: $e');
+        }
+      }
+
+      print('Highest sequence found for taluka $taluka: $highestSequence');
+      return highestSequence;
+    } catch (e) {
+      print('Error getting highest sequence for taluka $taluka: $e');
+      return 0;
+    }
+  }
+
+// 2. Helper method to extract sequence number from existing UniqueId
+  int _extractSequenceFromUniqueId(String uniqueId, String taluka) {
+    try {
+      // Find location and taluka abbreviations for this taluka
+      String? locationSlug;
+
+      // Try to find from loaded configuration
+      if (_fullLocationData.isNotEmpty) {
+        for (final location in _fullLocationData) {
+          final talukas = List<String>.from(location['talukas'] ?? []);
+          if (talukas.contains(taluka)) {
+            locationSlug = location['slug'];
+            break;
+          }
+        }
+      }
+
+      // Fallback to hardcoded mapping
+      if (locationSlug == null) {
+        locationSlug = _talukaToLocationMapping[taluka];
+      }
+
+      if (locationSlug == null) return 0;
+
+      final locationAbbr = _locationAbbreviations[locationSlug];
+      final talukaAbbr = _talukaAbbreviations[taluka];
+
+      if (locationAbbr == null || talukaAbbr == null) return 0;
+
+      // Expected format: LocationAbbrTalukaAbbrSequenceNumber
+      final prefix = '$locationAbbr$talukaAbbr';
+      if (uniqueId.startsWith(prefix) && uniqueId.length > prefix.length) {
+        final sequenceStr = uniqueId.substring(prefix.length);
+        return int.tryParse(sequenceStr) ?? 0;
+      }
+
+      return 0;
+    } catch (e) {
+      print('Error extracting sequence from UniqueId $uniqueId: $e');
+      return 0;
+    }
+  }
+
+// 3. Updated generateUniqueId method (no longer increments count)
+  Future<String> generateUniqueId(Map<String, dynamic> record) async {
+    try {
+      final talukaName = record['Taluka']?.toString().trim();
+      if (talukaName == null || talukaName.isEmpty) {
+        throw Exception('Taluka name is required for generating unique ID');
+      }
+
+      print('Generating unique ID for taluka: $talukaName');
+
+      // Get taluka abbreviation
+      final talukaAbbr = _talukaAbbreviations[talukaName];
+      if (talukaAbbr == null) {
+        throw Exception('No abbreviation found for taluka: $talukaName');
+      }
+
+      String? locationSlug;
+
+      // Try to find location slug from loaded configuration data first
+      if (_fullLocationData.isNotEmpty) {
+        for (final location in _fullLocationData) {
+          final talukas = List<String>.from(location['talukas'] ?? []);
+          if (talukas.contains(talukaName)) {
+            locationSlug = location['slug'];
+            break;
+          }
+        }
+      }
+
+      // If not found in loaded data, use hardcoded fallback mapping
+      if (locationSlug == null) {
+        locationSlug = _talukaToLocationMapping[talukaName];
+        print(
+            'Using fallback location mapping for taluka: $talukaName -> $locationSlug');
+      }
+
+      if (locationSlug == null) {
+        throw Exception('Location not found for taluka: $talukaName');
+      }
+
+      final locationAbbr = _locationAbbreviations[locationSlug];
+      if (locationAbbr == null) {
+        throw Exception('No abbreviation found for location: $locationSlug');
+      }
+
+      // Get next sequence number based on highest existing sequence
+      final nextSequence = await _getNextSequenceNumber(talukaName);
+
+      final uniqueId = '$locationAbbr$talukaAbbr$nextSequence';
+      print('Generated unique ID: $uniqueId for taluka: $talukaName');
+
+      return uniqueId;
+    } catch (e) {
+      print('Error generating unique ID: $e');
+      rethrow;
+    }
+  }
+
+// 4. Updated _getNextSequenceNumber method (uses highest sequence, doesn't increment count)
+  Future<int> _getNextSequenceNumber(String taluka) async {
+    try {
+      // Get the highest existing sequence number for this taluka
+      final highestSequence = await _getHighestSequenceNumberForTaluka(taluka);
+
+      // If no existing sequences found, calculate based on bundle number and count
+      if (highestSequence == 0) {
+        final db = await _databaseHelper.database;
+        final result = await db.query(
+          'bundles',
+          where: 'taluka = ? AND status = ?',
+          whereArgs: [taluka, 'active'],
+          limit: 1,
+        );
+
+        if (result.isNotEmpty) {
+          final bundle = result.first;
+          final bundleNo = (bundle['bundleNo'] ?? 1) as int;
+          final count = (bundle['count'] ?? 0) as int;
+
+          // Calculate starting sequence for this bundle
+          final baseSequence = (bundleNo - 1) * 250;
+
+          // Return the next sequence after the current count
+          return baseSequence + count + 1;
+        } else {
+          throw Exception('No bundle found for taluka: $taluka');
+        }
+      }
+
+      // Return next sequence after the highest found
+      return highestSequence + 1;
+    } catch (e) {
+      print('Error getting next sequence number for taluka $taluka: $e');
+      rethrow;
+    }
+  }
+
+// 5. Updated saveRecordToSync method with duplicate prevention
+  Future<bool> saveRecordToSync(Map<String, dynamic> record) async {
+    try {
+      // Check if record with same UniqueId already exists in temp table
+      if (record['UniqueId'] != null) {
+        final existingRecords = await _databaseHelper.getRecordsToSync();
+        final isDuplicate = existingRecords.any((existingRecord) =>
+            existingRecord['UniqueId'] == record['UniqueId']);
+
+        if (isDuplicate) {
+          print(
+              'Record with UniqueId ${record['UniqueId']} already exists in temporary storage');
+          return false; // Don't save duplicate
+        }
+      }
+
+      // Check if record with same 'Search from' already exists
+      final searchFrom = record['Search from'];
+      if (searchFrom != null) {
+        final existingRecords = await _databaseHelper.getRecordsToSync();
+        final isDuplicateSearchFrom = existingRecords.any(
+            (existingRecord) => existingRecord['Search from'] == searchFrom);
+
+        if (isDuplicateSearchFrom) {
+          print(
+              'Record with Search from $searchFrom already exists in temporary storage');
+          return false; // Don't save duplicate
+        }
+      }
+
+      final success_temp = await _databaseHelper.saveRecordToSync(record);
+      final success_permanent = await _databaseHelper.updateRecordWithUniqueId(
+          record['Search from'], record['UniqueId'] ?? record['UniqueId']);
+
+      if (success_temp && success_permanent) {
+        notifyListeners();
+      }
+
+      return success_temp && success_permanent;
+    } catch (e) {
+      print('Error saving record to sync: $e');
+      return false;
+    }
+  }
+
+// 6. Updated incrementBundleCount method (only called after successful save)
   Future<void> incrementBundleCount(String taluka) async {
     final db = await _databaseHelper.database;
     final result = await db.query(
@@ -608,7 +857,7 @@ class DataProvider with ChangeNotifier {
       // Immediately refresh local bundles for UI
       await refreshLocalBundles();
 
-      // CRITICAL: Save updated bundles to SharedPreferences immediately
+      // Save updated bundles to SharedPreferences immediately
       await _saveBundlesToPrefs(_serverBundles);
 
       print(
@@ -616,147 +865,6 @@ class DataProvider with ChangeNotifier {
       print('Updated bundles saved to SharedPreferences');
     } else {
       throw Exception('No active bundle found for taluka: $taluka');
-    }
-  }
-
-  // Generate unique ID for a record
-  Future<String> generateUniqueId(Map<String, dynamic> record) async {
-    try {
-      final talukaName = record['Taluka']?.toString().trim();
-      if (talukaName == null || talukaName.isEmpty) {
-        throw Exception('Taluka name is required for generating unique ID');
-      } else {
-        print('Generating unique ID for taluka: $talukaName');
-      }
-
-      // Get taluka abbreviation (existing logic)
-      final talukaAbbr = _talukaAbbreviations[talukaName];
-      if (talukaAbbr == null) {
-        throw Exception('No abbreviation found for taluka: $talukaName');
-      } else {
-        print('Taluka abbreviation found: $talukaAbbr');
-      }
-
-      String? locationSlug;
-
-      // Try to find location slug from loaded configuration data first (online mode)
-      if (_fullLocationData.isNotEmpty) {
-        for (final location in _fullLocationData) {
-          final talukas = List<String>.from(location['talukas'] ?? []);
-          if (talukas.contains(talukaName)) {
-            locationSlug = location['slug'];
-            break;
-          }
-        }
-      }
-
-      // If not found in loaded data, use hardcoded fallback mapping (offline mode)
-      if (locationSlug == null) {
-        locationSlug = _talukaToLocationMapping[talukaName];
-        print(
-            'Using fallback location mapping for taluka: $talukaName -> $locationSlug');
-      }
-
-      if (locationSlug == null) {
-        throw Exception('Location not found for taluka: $talukaName');
-      }
-
-      final locationAbbr = _locationAbbreviations[locationSlug];
-      if (locationAbbr == null) {
-        throw Exception('No abbreviation found for location: $locationSlug');
-      }
-
-      // Get current sequence and increment count immediately
-      final nextSequence = await _getNextSequenceNumber(talukaName);
-
-      final uniqueId = '$locationAbbr$talukaAbbr$nextSequence';
-      print('Generated unique ID: $uniqueId for taluka: $talukaName');
-
-      return uniqueId;
-    } catch (e) {
-      print('Error generating unique ID: $e');
-      rethrow;
-    }
-  }
-
-  // Get next sequence number for a specific taluka
-  Future<int> _getNextSequenceNumber(String taluka) async {
-    final db = await _databaseHelper.database;
-    final result = await db.query(
-      'bundles',
-      where: 'taluka = ?',
-      whereArgs: [taluka],
-      limit: 1,
-    );
-    if (result.isNotEmpty) {
-      final bundle = result.first;
-      final bundleNo = (bundle['bundleNo'] ?? 1) as int;
-      final count = (bundle['count'] ?? 0) as int;
-      // Sequence number logic: (bundleNo - 1) * 250 + count
-      return (bundleNo - 1) * 250 +
-          count +
-          1; // Increment by 1 for next sequence
-    } else {
-      throw Exception('No bundle found for taluka: $taluka');
-    }
-  }
-
-// New method that gets sequence and increments count
-  // Future<int> _getNextSequenceNumberAndIncrement(String taluka) async {
-  //   final db = await _databaseHelper.database;
-  //   final result = await db.query(
-  //     'bundles',
-  //     where: 'taluka = ? AND status = ?',
-  //     whereArgs: [taluka, 'active'],
-  //     limit: 1,
-  //   );
-
-  //   if (result.isNotEmpty) {
-  //     final bundle = result.first;
-  //     final bundleNo = (bundle['bundleNo'] ?? 1) as int;
-  //     final currentCount = (bundle['count'] ?? 0) as int;
-
-  //     print(
-  //         'BEFORE INCREMENT: Bundle $bundleNo, Taluka: $taluka, Count: $currentCount');
-
-  //     // Calculate sequence number
-  //     final sequenceNumber = (bundleNo - 1) * 250 + currentCount + 1;
-
-  //     // Increment count immediately in local database
-  //     final updateResult = await db.update(
-  //       'bundles',
-  //       {'count': currentCount + 1},
-  //       where: 'bundleNo = ? AND taluka = ?',
-  //       whereArgs: [bundleNo, taluka],
-  //     );
-
-  //     print('Local count updated: $updateResult rows affected');
-
-  //     // Immediately refresh local bundles for UI
-  //     await refreshLocalBundles();
-
-  //     print(
-  //         'Incremented local count for taluka: $taluka, new count: ${currentCount + 1}');
-
-  //     return sequenceNumber;
-  //   } else {
-  //     throw Exception('No active bundle found for taluka: $taluka');
-  //   }
-  // }
-
-  // Save record to temporary sync table
-  Future<bool> saveRecordToSync(Map<String, dynamic> record) async {
-    try {
-      final success_temp = await _databaseHelper.saveRecordToSync(record);
-      final success_permanent = await _databaseHelper.updateRecordWithUniqueId(
-          record['Search from'], record['UniqueId'] ?? record['UniqueId']);
-      if (success_temp && success_permanent) {
-        notifyListeners();
-      }
-      return success_temp && success_permanent;
-    } catch (e) {
-      print('Error saving record to sync: $e');
-      return false;
     }
   }
 

@@ -1133,12 +1133,14 @@ class _DataScreenState extends State<DataScreen> {
                     try {
                       final provider =
                           Provider.of<DataProvider>(context, listen: false);
+
                       // Check if bundle is available for this taluka
                       final taluka = _selectedRecord!['Taluka'];
                       final bundle = provider.serverBundles.firstWhere(
                         (b) => b['taluka'] == taluka && (b['count'] ?? 0) < 250,
                         orElse: () => {},
                       );
+
                       print("Bundle for $taluka: $bundle");
                       print("Selected Record: $_selectedRecord");
 
@@ -1153,6 +1155,7 @@ class _DataScreenState extends State<DataScreen> {
                         return;
                       }
 
+                      // Generate unique ID (this no longer increments the count)
                       final uniqueId =
                           await provider.generateUniqueId(_selectedRecord!);
                       print("Generated Unique ID: $uniqueId");
@@ -1229,11 +1232,12 @@ class _DataScreenState extends State<DataScreen> {
                         return;
                       }
 
+                      // Save record to temporary storage (with duplicate checking)
                       final success =
                           await provider.saveRecordToSync(_selectedRecord!);
 
                       if (success) {
-                        // Increment bundle count after successful save
+                        // Only increment bundle count if save was successful and not a duplicate
                         await provider.incrementBundleCount(taluka);
                         await _loadTempRecords(); // Refresh temp records list
 
@@ -1263,12 +1267,18 @@ class _DataScreenState extends State<DataScreen> {
                             backgroundColor: Colors.green,
                           ),
                         );
+
+                        // Clear the selected record after successful save
+                        setState(() {
+                          _selectedRecord = null;
+                          _isUniqueIdGenerated = false;
+                        });
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
-                                'Failed to save record. Temporary storage might be full (250 records limit).'),
-                            backgroundColor: Colors.red,
+                                'Failed to save record. Record may already exist in temporary storage.'),
+                            backgroundColor: Colors.orange,
                           ),
                         );
                       }
