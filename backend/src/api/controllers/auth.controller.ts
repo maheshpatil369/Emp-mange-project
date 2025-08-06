@@ -70,10 +70,12 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
         const userCredential = await signInWithEmailAndPassword(clientAuth, email, password);
         const user = userCredential.user;
         const idToken = await user.getIdToken();
+        const refreshToken = user.refreshToken; // New field needed
 
         return res.status(200).json({
             message: 'Login successful.',
             token: idToken,
+            refreshToken: refreshToken, // Include the refresh token in the response
             user: {
                 uid: user.uid,
                 email: user.email,
@@ -86,5 +88,61 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
             return res.status(401).json({ message: 'Unauthorized: Invalid credentials.' });
         }
         return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+export const refreshToken = async (req: Request, res: Response): Promise<Response> => {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+        return res.status(400).json({ message: 'Bad Request: "refreshToken" is required.' });
+    }
+
+    try {
+        // Use Firebase REST API to refresh the user's ID token
+        const apiKey = process.env.FIREBASE_WEB_API_KEY;
+        if (!apiKey) {
+            console.error('FATAL: FIREBASE_WEB_API_KEY is not defined in environment variables.');
+            return res.status(500).json({ message: 'Internal Server Error: Server configuration issue.' });
+        }
+
+        const firebaseRefreshUrl = `https://securetoken.googleapis.com/v1/token?key=${apiKey}`;
+
+        const response = await fetch(firebaseRefreshUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                grant_type: 'refresh_token',
+                refresh_token: refreshToken,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error('Firebase token refresh failed:', data);
+            if (data.error && data.error.message) {
+                // Common Firebase refresh token errors
+                if (data.error.message.includes('TOKEN_EXPIRED') || 
+                    data.error.message.includes('INVALID_REFRESH_TOKEN')) {
+                    return res.status(401).json({ message: 'Refresh token expired. Please login again.' });
+                }
+            }
+            return res.status(401).json({ message: 'Invalid refresh token.' });
+        }
+
+        // Firebase returns the new tokens
+        return res.status(200).json({
+            accessToken: data.id_token,           // New ID token
+            token: data.id_token,                 // Alternative name for compatibility
+            refreshToken: data.refresh_token,     // New refresh token
+            expiresIn: data.expires_in            // Token expiry time
+        });
+
+    } catch (error: any) {
+        console.error('Error during token refresh:', error);
+        return res.status(500).json({ message: 'Internal Server Error during token refresh.' });
     }
 };

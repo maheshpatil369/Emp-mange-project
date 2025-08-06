@@ -519,7 +519,7 @@ class _DataScreenState extends State<DataScreen> {
                                       } else {
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
-                                          const SnackBar(
+                                          SnackBar(
                                             content: Text(
                                                 'Failed to sync records to server. Please try again.'),
                                             backgroundColor: Colors.red,

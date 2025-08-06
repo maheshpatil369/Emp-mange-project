@@ -29,25 +29,26 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      if (token == null) {
-        print('No token found in SharedPreferences. User is not logged in.');
-        _user = null;
-        notifyListeners();
-        return;
-      }
-      final name = prefs.getString('name');
-      final email = prefs.getString('email');
-      if (token != null && name != null && email != null) {
-        _user = User(name: name, email: email); // Adjust User model as needed
-        notifyListeners();
-      } else if (token != null) {
-        _user = null;
-        print('No user information found, token exists.');
+      // Use the new isAuthenticated method from ApiService
+      final isAuth = await _apiService.isAuthenticated();
+
+      if (isAuth) {
+        final prefs = await SharedPreferences.getInstance();
+        final name = prefs.getString('name');
+        final email = prefs.getString('email');
+
+        if (name != null && email != null) {
+          _user = User(name: name, email: email);
+          print('User authenticated successfully with valid/refreshed token');
+        } else {
+          // If tokens are valid but user info is missing, clear everything
+          await _apiService.logout();
+          _user = null;
+          print('Token valid but user info missing, cleared session');
+        }
       } else {
         _user = null;
-        print('User is not logged in.');
+        print('User is not authenticated or tokens cannot be refreshed');
       }
     } catch (e) {
       _errorMessage = 'Failed to check login status: ${e.toString()}';
@@ -105,11 +106,11 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
     print('Attempting logout...'); // Debugging print
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear(); // Clear all preferences
+      // Use the new logout method from ApiService
+      await _apiService.logout();
       _user = null;
       _errorMessage = null;
-      print('Logout successful.'); // Debugging print
+      print('Logout successful - all tokens cleared.'); // Debugging print
     } catch (e) {
       _errorMessage = 'Logout failed: ${e.toString()}';
       print('Error during logout: $_errorMessage'); // Debugging print

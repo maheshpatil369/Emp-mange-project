@@ -10,7 +10,7 @@ class ApiService {
       'https://emp-mange-project.onrender.com/api/data';
   // this production url refers to the backend url after hosting it
 
-  // Login function: Authenticates user and saves the token locally.
+  // Login function: Authenticates user and saves both access and refresh tokens locally.
   Future<String> login(String email, String password) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/auth/login'),
@@ -25,12 +25,21 @@ class ApiService {
 
       if (responseBody['token'] != null) {
         final token = responseBody['token'];
+        final refreshToken = responseBody['refreshToken']; // Get refresh token
         final prefs = await SharedPreferences.getInstance();
         final user = responseBody['user']['displayName'];
-        final email = responseBody['user']['email'];
-        await prefs.setString('token', token);
-        await prefs.setString('email', email); // Save email for future use
+        final userEmail = responseBody['user']['email'];
+        print("Refresh Token: $refreshToken"); // DEBUG: Print refresh token
+
+        // Save both tokens with timestamp
+        await prefs.setString('accessToken', token);
+        await prefs.setString('refreshToken', refreshToken ?? '');
+        await prefs.setString('email', userEmail); // Save email for future use
         await prefs.setString('name', user); // Save user name
+        await prefs.setInt(
+            'tokenTimestamp', DateTime.now().millisecondsSinceEpoch);
+
+        print('Tokens saved: Access Token and Refresh Token stored');
         return token;
       } else {
         print(
@@ -47,30 +56,152 @@ class ApiService {
     }
   }
 
-  // Common method to get headers with Authorization token from SharedPreferences.
-  // Used for all authenticated API calls.
+  // Refresh the access token using the refresh token
+  Future<String?> refreshAccessToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final refreshToken = prefs.getString('refreshToken');
+
+      if (refreshToken == null || refreshToken.isEmpty) {
+        print('No refresh token available');
+        return null;
+      }
+
+      print('Attempting to refresh access token...');
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/refresh'),
+        headers: {'Content-Type': 'application/json; charset=UTF-8'},
+        body: json.encode({'refreshToken': refreshToken}),
+      );
+
+      if (response.statusCode == 200) {
+        final responseBody = json.decode(response.body);
+        final newAccessToken =
+            responseBody['accessToken'] ?? responseBody['token'];
+        final newRefreshToken = responseBody['refreshToken'];
+
+        if (newAccessToken != null) {
+          // Update stored tokens
+          await prefs.setString('accessToken', newAccessToken);
+          if (newRefreshToken != null) {
+            await prefs.setString('refreshToken', newRefreshToken);
+          }
+          await prefs.setInt(
+              'tokenTimestamp', DateTime.now().millisecondsSinceEpoch);
+
+          print('Access token refreshed successfully');
+          return newAccessToken;
+        }
+      } else {
+        print(
+            'Token refresh failed with status: ${response.statusCode}, body: ${response.body}');
+      }
+    } catch (e) {
+      print('Exception during token refresh: $e');
+    }
+
+    return null;
+  }
+
+  // Check if the current token is expired (considering 1-hour expiry)
+  Future<bool> isTokenExpired() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final tokenTimestamp = prefs.getInt('tokenTimestamp');
+
+      if (tokenTimestamp == null) {
+        return true; // No timestamp means token is invalid
+      }
+
+      final tokenAge = DateTime.now().millisecondsSinceEpoch - tokenTimestamp;
+      final oneHourInMs = 60 * 60 * 1000; // 1 hour in milliseconds
+
+      // Consider token expired if it's older than 50 minutes (buffer of 10 minutes)
+      return tokenAge > (oneHourInMs - 10 * 60 * 1000);
+    } catch (e) {
+      print('Error checking token expiry: $e');
+      return true; // Default to expired on error
+    }
+  }
+
+  // Common method to get headers with Authorization token, with automatic refresh
   Future<Map<String, String>> _getHeaders() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
+    String? token = prefs.getString('accessToken') ??
+        prefs.getString('token'); // Backward compatibility
+
     if (token == null) {
-      print('Error: Token not found in SharedPreferences.'); // Debugging print
+      print('Error: No access token found in SharedPreferences.');
       throw Exception('User not logged in. Token not found.');
     }
+
+    // Check if token is expired and try to refresh
+    if (await isTokenExpired()) {
+      print('Access token is expired, attempting refresh...');
+      final refreshedToken = await refreshAccessToken();
+
+      if (refreshedToken != null) {
+        token = refreshedToken;
+        print('Successfully refreshed expired token');
+      } else {
+        print('Failed to refresh token, user needs to login again');
+        throw Exception('Session expired. Please login again.');
+      }
+    }
+
     return {
       'Content-Type': 'application/json; charset=UTF-8',
       'Authorization': 'Bearer $token',
     };
   }
 
+  // Enhanced method to make authenticated API calls with automatic retry on token expiry
+  Future<http.Response> _makeAuthenticatedRequest(
+    Future<http.Response> Function(Map<String, String> headers) requestFunction,
+  ) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await requestFunction(headers);
+
+      // If we get a 401, try refreshing token and retry once
+      if (response.statusCode == 401) {
+        print('Received 401, attempting token refresh and retry...');
+
+        final refreshedToken = await refreshAccessToken();
+        if (refreshedToken != null) {
+          final newHeaders = {
+            'Content-Type': 'application/json; charset=UTF-8',
+            'Authorization': 'Bearer $refreshedToken',
+          };
+          final retryResponse = await requestFunction(newHeaders);
+
+          if (retryResponse.statusCode == 401) {
+            throw Exception('Session expired. Please login again.');
+          }
+
+          return retryResponse;
+        } else {
+          throw Exception('Session expired. Please login again.');
+        }
+      }
+
+      return response;
+    } catch (e) {
+      print('Error in authenticated request: $e');
+      rethrow;
+    }
+  }
+
   // Configuration data fetch karne ke liye (Districts, Talukas).
   // Calls backend endpoint: GET /api/data/config
   Future<Map<String, dynamic>> fetchConfig() async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/data/config'), // Fixed endpoint
-        headers: headers,
-      );
+      final response = await _makeAuthenticatedRequest((headers) async {
+        return await http.get(
+          Uri.parse('$_baseUrl/data/config'),
+          headers: headers,
+        );
+      });
 
       print('Config API Response Status Code: ${response.statusCode}');
       print('Config API Response Body: ${response.body}');
@@ -157,12 +288,13 @@ class ApiService {
   // Calls backend endpoint: POST /api/data/records/sync
   Future<bool> syncProcessedRecords(Map<String, dynamic> syncData) async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.post(
-        Uri.parse('$_baseUrl/data/records/sync'),
-        headers: headers,
-        body: json.encode(syncData),
-      );
+      final response = await _makeAuthenticatedRequest((headers) async {
+        return await http.post(
+          Uri.parse('$_baseUrl/data/records/sync'),
+          headers: headers,
+          body: json.encode(syncData),
+        );
+      });
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         print("response.body: ${response.body}");
@@ -186,11 +318,12 @@ class ApiService {
   // Fetch user's active bundles from the server
   Future<Map<String, dynamic>> fetchActiveBundles() async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/data/bundles/active'),
-        headers: headers,
-      );
+      final response = await _makeAuthenticatedRequest((headers) async {
+        return await http.get(
+          Uri.parse('$_baseUrl/data/bundles/active'),
+          headers: headers,
+        );
+      });
 
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
@@ -205,11 +338,12 @@ class ApiService {
 
   Future<String> getUserLocation() async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/users/me'),
-        headers: headers,
-      );
+      final response = await _makeAuthenticatedRequest((headers) async {
+        return await http.get(
+          Uri.parse('$_baseUrl/users/me'),
+          headers: headers,
+        );
+      });
 
       if (response.statusCode == 200) {
         return json.decode(response.body)['location'] as String;
@@ -219,6 +353,51 @@ class ApiService {
     } catch (e) {
       print('Exception during getUserLocation: $e');
       rethrow;
+    }
+  }
+
+  // Logout method that clears all stored tokens
+  Future<void> logout() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('accessToken');
+      await prefs.remove('refreshToken');
+      await prefs.remove(
+          'token'); // Remove old token format for backward compatibility
+      await prefs.remove('tokenTimestamp');
+      await prefs.remove('email');
+      await prefs.remove('name');
+      print('All user tokens and data cleared successfully');
+    } catch (e) {
+      print('Error during logout: $e');
+    }
+  }
+
+  // Check if user has valid authentication (either valid token or refresh token)
+  Future<bool> isAuthenticated() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken =
+          prefs.getString('accessToken') ?? prefs.getString('token');
+      final refreshToken = prefs.getString('refreshToken');
+
+      // User is authenticated if they have either a valid access token or a refresh token
+      if (accessToken != null) {
+        // If token is not expired, user is authenticated
+        if (!(await isTokenExpired())) {
+          return true;
+        }
+        // If token is expired but we have refresh token, try to refresh
+        if (refreshToken != null && refreshToken.isNotEmpty) {
+          final newToken = await refreshAccessToken();
+          return newToken != null;
+        }
+      }
+
+      return false;
+    } catch (e) {
+      print('Error checking authentication status: $e');
+      return false;
     }
   }
 }
