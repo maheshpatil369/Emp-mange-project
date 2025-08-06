@@ -1,6 +1,6 @@
 // File: src/components/Analytics.jsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -22,6 +22,7 @@ import {
   FileWarning,
 } from "lucide-react";
 import apiClient from "../lib/axios";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 const AnalyticsPage = () => {
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -233,157 +234,289 @@ const ProcessingStatusByFile = ({ data }) => (
   </div>
 );
 
-const UserLeaderboard = ({ data }) => (
-  <div className="bg-white p-6 rounded-lg shadow-md">
-    <h2 className="text-xl font-semibold text-gray-700">User Leaderboard</h2>
-    <div className="mt-4 overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-              Rank
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-              User Name
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-              Records Processed
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {data?.map((user) => (
-            <tr key={user.userName}>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold">
-                {user.rank}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                {user.userName}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                {user.recordsProcessed.toLocaleString()}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-);
-
-const BundleCompletionSummary = ({
-  data,
-  config,
-  onLocationChange,
-  onTalukaChange,
-}) => {
-  const [talukaOptions, setTalukaOptions] = useState([]);
-
-  const handleLocationFilterChange = (e) => {
-    const newLocation = e.target.value;
-    onLocationChange(newLocation);
-    onTalukaChange(""); // Reset taluka filter when location changes
-
-    if (newLocation && config?.talukas) {
-      const talukaData = config.talukas.find(
-        (t) => t.locationSlug === newLocation
-      );
-      setTalukaOptions(talukaData ? talukaData.talukas : []);
-    } else {
-      setTalukaOptions([]);
-    }
-  };
+const UserLeaderboard = ({ data = [] }) => {
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-xl font-semibold text-gray-700">
-        Bundle Completion Summary
-      </h2>
-
-      {/* Filters */}
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <select
-          onChange={handleLocationFilterChange}
-          className="p-2 border rounded-md bg-gray-50"
+      {/* Header with collapse toggle */}
+      <div
+        className="flex justify-between items-center cursor-pointer"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <h2 className="text-xl font-semibold text-gray-700">
+          User Leaderboard
+        </h2>
+        <button
+          className="text-sm text-blue-500 hover:underline flex items-center"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }}
         >
-          <option value="">Filter by Location</option>
-          {config?.locations.map((loc) => (
-            <option key={loc.slug} value={loc.slug}>
-              {loc.name}
-            </option>
-          ))}
-        </select>
-        <select
-          onChange={(e) => onTalukaChange(e.target.value)}
-          className="p-2 border rounded-md bg-gray-50"
-        >
-          <option value="">Filter by Taluka</option>
-          {talukaOptions.map((taluka) => (
-            <option key={taluka} value={taluka}>
-              {taluka}
-            </option>
-          ))}
-        </select>
+          {isOpen ? (
+            <>
+              <ChevronDown size={16} className="mr-1" />
+              Collapse
+            </>
+          ) : (
+            <>
+              <ChevronRight size={16} className="mr-1" />
+              Expand
+            </>
+          )}
+        </button>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                User Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Location
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Taluka
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Bundle No.
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Records Processed
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                PDFs Required
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Status
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {data?.map((bundle) => (
-              <tr key={`${bundle.userName}-${bundle.bundleNo}`}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {bundle.userName}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {bundle.location}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {bundle.taluka}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  #{bundle.bundleNo}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {bundle.recordsProcessed}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {bundle.pdfsRequired}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                    {bundle.status}
-                  </span>
-                </td>
+      {/* Collapsible content */}
+      {isOpen && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Rank
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  User Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Records Processed
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {data.map((user) => (
+                <tr key={user.userName}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold">
+                    {user.rank}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {user.userName}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                    {user.recordsProcessed.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+              {data.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="text-center py-6 text-gray-500">
+                    No data available.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const BundleCompletionSummary = ({ data = [], config = {} }) => {
+  const [locationFilter, setLocationFilter] = useState("");
+  const [talukaFilter, setTalukaFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [talukaOptions, setTalukaOptions] = useState([]);
+  const [isOpen, setIsOpen] = useState(true);
+
+  const handleLocationChange = (e) => {
+    const selectedLocation = e.target.value;
+    setLocationFilter(selectedLocation);
+    setTalukaFilter("");
+
+    const matchingLocation = config.talukas?.find(
+      (entry) => entry.locationSlug === selectedLocation
+    );
+
+    setTalukaOptions(matchingLocation?.talukas || []);
+  };
+
+  const getStatusClass = (status) => {
+    switch (status) {
+      case "Completed by User":
+        return "px-2 inline-flex text-xs font-semibold rounded-full bg-green-100 text-green-800";
+      case "Force Completed by Admin":
+        return "px-2 inline-flex text-xs font-semibold rounded-full bg-red-100 text-red-800";
+      case "In Progress":
+        return "px-2 inline-flex text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800";
+      default:
+        return "px-2 inline-flex text-xs font-semibold rounded-full bg-gray-100 text-gray-800";
+    }
+  };
+
+  const uniqueStatuses = useMemo(() => {
+    return Array.from(new Set(data.map((item) => item.status).filter(Boolean)));
+  }, [data]);
+
+  const filteredData = useMemo(() => {
+    return data.filter((item) => {
+      const matchLocation = locationFilter
+        ? item.location === locationFilter
+        : true;
+      const matchTaluka = talukaFilter ? item.taluka === talukaFilter : true;
+      const matchStatus = statusFilter ? item.status === statusFilter : true;
+      const matchUser = searchTerm
+        ? (item.userName || "").toLowerCase().includes(searchTerm.toLowerCase())
+        : true;
+
+      return matchLocation && matchTaluka && matchStatus && matchUser;
+    });
+  }, [data, locationFilter, talukaFilter, statusFilter, searchTerm]);
+
+  console.log(filteredData);
+
+  return (
+    <div className="bg-white p-4 rounded-lg shadow-md">
+      {/* Header */}
+      <div
+        className="flex justify-between items-center cursor-pointer"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <h2 className="text-xl font-semibold text-gray-700">
+          Bundle Completion Summary
+        </h2>
+        <button
+          className="text-sm text-blue-500 hover:underline flex items-center"
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent double toggle
+            setIsOpen(!isOpen);
+          }}
+        >
+          {isOpen ? (
+            <>
+              <ChevronDown size={16} className="mr-1" />
+              Collapse
+            </>
+          ) : (
+            <>
+              <ChevronRight size={16} className="mr-1" />
+              Expand
+            </>
+          )}
+        </button>
       </div>
+
+      {/* Collapsible content */}
+      {isOpen && (
+        <>
+          {/* Filters */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Location */}
+            <select
+              value={locationFilter}
+              onChange={handleLocationChange}
+              className="p-2 border rounded-md bg-gray-50"
+            >
+              <option value="">Filter by Location</option>
+              {config.locations?.map((loc) => (
+                <option key={loc.slug} value={loc.slug}>
+                  {loc.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Taluka */}
+            <select
+              value={talukaFilter}
+              onChange={(e) => setTalukaFilter(e.target.value)}
+              className="p-2 border rounded-md bg-gray-50"
+              disabled={!locationFilter}
+            >
+              <option value="">Filter by Taluka</option>
+              {talukaOptions.map((taluka) => (
+                <option key={taluka} value={taluka}>
+                  {taluka}
+                </option>
+              ))}
+            </select>
+
+            {/* Status */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="p-2 border rounded-md bg-gray-50"
+            >
+              <option value="">Filter by Status</option>
+              {uniqueStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+
+            {/* User Name */}
+            <input
+              type="text"
+              placeholder="Search by user name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="p-2 border rounded-md"
+            />
+          </div>
+
+          {/* Table */}
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  {[
+                    "User Name",
+                    "Location",
+                    "Taluka",
+                    "Bundle No.",
+                    "Records Processed",
+                    "PDFs Required",
+                    "Status",
+                  ].map((header) => (
+                    <th
+                      key={header}
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredData.map((bundle) => (
+                  <tr
+                    key={`${bundle.location}-${bundle.taluka}-${
+                      bundle.bundleNo
+                    }-${Math.random()}`}
+                  >
+                    <td className="px-6 py-4 text-sm">{bundle.userName}</td>
+                    <td className="px-6 py-4 text-sm">{bundle.location}</td>
+                    <td className="px-6 py-4 text-sm">{bundle.taluka}</td>
+                    <td className="px-6 py-4 text-sm">#{bundle.bundleNo}</td>
+                    <td className="px-6 py-4 text-sm">
+                      {bundle.recordsProcessed}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {bundle.pdfsRequired ?? 0}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <span className={getStatusClass(bundle.status)}>
+                        {bundle.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+
+                {filteredData.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-6 text-gray-500">
+                      No results found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 };

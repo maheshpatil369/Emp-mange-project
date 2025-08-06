@@ -55,30 +55,61 @@ export async function createUserInDB(userData: Omit<User, "id">) {
 }
 
 /**
- * Saves the parsed content of an uploaded file to the Realtime Database.
+ * Creates a metadata-only record for a new file in the Realtime Database.
+ * This is the first step in the batch upload process.
  * @param location - The location slug (e.g., "akola").
- * @param fileData - The file metadata and its parsed JSON content.
+ * @param fileMetadata - An object containing file metadata (name, size, etc.).
  * @returns The unique key (ID) of the new file record in Firebase.
  */
-export async function saveUploadedFileToDB(
+export async function createFileMetadataInDB(
   location: string,
-  fileData: any
+  fileMetadata: Omit<any, "content">
 ): Promise<string> {
   const db = admin.database();
   const filesRef = db.ref(`files/${location}`);
 
-  // Push the new file data to the database, which generates a unique key.
+  // Push to get a new unique key for the file
   const newFileRef = filesRef.push();
 
   const dataToSave = {
     id: newFileRef.key, // Save the generated key as part of the data
-    ...fileData,
+    ...fileMetadata,
+    // Note: The 'content' is intentionally omitted here
   };
 
   await newFileRef.set(dataToSave);
 
-  // Return the unique key of the newly created record.
   return newFileRef.key!;
+}
+
+/**
+ * Saves a batch of records to a specific file's content node in the database.
+ * This uses a multi-path update for efficiency.
+ * @param location - The location slug.
+ * @param fileId - The unique ID of the file to which the content belongs.
+ * @param batch - An array of records to save.
+ */
+export async function saveContentBatchToDB(
+  location: string,
+  fileId: string,
+  batch: any[]
+): Promise<void> {
+  const db = admin.database();
+  const contentRef = db.ref(`files/${location}/${fileId}/content`);
+  const updates: { [key: string]: any } = {};
+
+  // Generate a unique key for each record in the batch and prepare the update object
+  batch.forEach((record) => {
+    const newRecordKey = contentRef.push().key; // Generate a unique key
+    if (newRecordKey) {
+      updates[newRecordKey] = record;
+    }
+  });
+
+  // Perform a single multi-path update for the entire batch
+  if (Object.keys(updates).length > 0) {
+    await contentRef.update(updates);
+  }
 }
 
 /**
@@ -110,7 +141,6 @@ export async function updateUserInDB(userId: string, updates: Partial<User>) {
   });
 }
 
-
 export const updateUserPermission = async (
   userId: string,
   canDownload: boolean
@@ -119,7 +149,6 @@ export const updateUserPermission = async (
   const userProfileRef = db.ref(`users/${userId}`);
   await userProfileRef.update({ canDownloadFiles: canDownload });
 };
-
 
 export async function deleteUserInDB(userId: string) {
   // 1. Delete from Firebase Authentication
@@ -169,7 +198,9 @@ export async function assignNewBundleToUser(
     const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
     const bundleCounterRef = db.ref(`bundleCounters/${location}/${taluka}`);
 
-    logger.info(`Attempting to assign bundle for user ${userId} in ${location}/${taluka}`);
+    logger.info(
+      `Attempting to assign bundle for user ${userId} in ${location}/${taluka}`
+    );
 
     // First, check if the user already has an active bundle for this taluka.
     const existingStateSnapshot = await userStateRef.once("value");
@@ -199,7 +230,9 @@ export async function assignNewBundleToUser(
           // Otherwise, use the nextBundle number.
           assignedBundleNo = currentData.nextBundle || 1;
           currentData.nextBundle = assignedBundleNo + 1;
-          logger.debug(`Assigning next sequential bundle number: ${assignedBundleNo}`);
+          logger.debug(
+            `Assigning next sequential bundle number: ${assignedBundleNo}`
+          );
         }
 
         return currentData; // Return the modified data to be saved by the transaction.
@@ -207,7 +240,9 @@ export async function assignNewBundleToUser(
     );
 
     if (!committed) {
-      logger.error(`Failed to commit transaction for user ${userId} in ${location}/${taluka}`);
+      logger.error(
+        `Failed to commit transaction for user ${userId} in ${location}/${taluka}`
+      );
       throw new Error(
         "Failed to commit transaction to assign bundle number. Please try again."
       );
@@ -221,13 +256,20 @@ export async function assignNewBundleToUser(
       taluka: taluka,
     };
 
-    logger.info(`Creating new bundle for user ${userId}: ${JSON.stringify(newBundle)}`);
+    logger.info(
+      `Creating new bundle for user ${userId}: ${JSON.stringify(newBundle)}`
+    );
     await userStateRef.set(newBundle);
 
-    logger.info(`Successfully assigned bundle #${newBundle.bundleNo} to user ${userId} in ${taluka}`);
+    logger.info(
+      `Successfully assigned bundle #${newBundle.bundleNo} to user ${userId} in ${taluka}`
+    );
     return newBundle;
   } catch (error) {
-    logger.error(`Complete error in assignNewBundleToUser for user ${userId} in ${location}/${taluka}:`, error);
+    logger.error(
+      `Complete error in assignNewBundleToUser for user ${userId} in ${location}/${taluka}:`,
+      error
+    );
     throw error; // Re-throw to allow caller to handle
   }
 }
@@ -306,7 +348,8 @@ export async function saveProcessedRecordsToDB(
 }
 
 /**
- * Marks a user's active bundle for a specific taluka as complete by deleting it.
+ * Marks a user's active bundle for a specific taluka as complete.
+ * This now adds a completion flag to the processed records and then deletes the active state.
  * @param userId - The UID of the user completing the bundle.
  * @param taluka - The taluka of the bundle to be marked as complete.
  */
@@ -317,16 +360,35 @@ export async function markBundleAsCompleteInDB(
   const db = admin.database();
   const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
 
-  // Check if the bundle state actually exists before trying to remove it.
-  const snapshot = await userStateRef.once("value");
-  if (!snapshot.exists()) {
+  // First, find the active bundle to get its number and the user's location
+  const activeBundleSnapshot = await userStateRef.once("value");
+  if (!activeBundleSnapshot.exists()) {
     throw new Error(
       `No active bundle found for user in taluka ${taluka} to mark as complete.`
     );
   }
+  const activeBundle: ActiveBundle = activeBundleSnapshot.val();
+  const bundleNo = activeBundle.bundleNo;
 
-  // Remove the entry from the database.
-  await userStateRef.remove();
+  const user = await getUserFromDB(userId);
+  if (!user) {
+    throw new Error(`User with ID ${userId} not found.`);
+  }
+  const location = user.location;
+
+  // Prepare a multi-path update
+  const updates: { [key: string]: any } = {};
+
+  // 1. Add a flag to the processedRecords path to mark this bundle as completed by the user
+  const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}`;
+  updates[`${recordPath}/isUserCompleted`] = true;
+  updates[`${recordPath}/userCompletedAt`] = new Date().toISOString();
+
+  // 2. Remove the bundle from the user's active state
+  updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
+
+  // Apply all changes in a single atomic operation
+  await db.ref().update(updates);
 }
 
 /**
@@ -791,46 +853,82 @@ export async function getAnalyticsDataFromDB(filters: {
 
   let bundleCompletionSummary = [];
 
+  const handledBundles = new Set(); // To prevent duplicate bundle entries
+
+  // This loop handles explicit completions and the new 250-record rule.
+  for (const location in processedRecordsData) {
+    for (const taluka in processedRecordsData[location]) {
+      for (const bundleKey in processedRecordsData[location][taluka]) {
+        const bundleData = processedRecordsData[location][taluka][bundleKey];
+        const bundleNo = parseInt(bundleKey.replace("bundle-", ""));
+        const uniqueBundleId = `${location}-${taluka}-${bundleNo}`;
+
+        let status = null;
+        let recordsProcessed = 0;
+        let userName = null;
+
+        // Calculate total records and find user for the bundle
+        for (const recordId in bundleData) {
+          const record = bundleData[recordId];
+
+          if (
+            typeof record === "object" &&
+            record !== null &&
+            record.processedBy
+          ) {
+            const user = userMap.get(record.processedBy);
+
+            if (user) {
+              // Set userName only once
+              if (!userName) userName = user.name;
+              recordsProcessed++;
+            }
+          }
+        }
+
+        // --- Status Priority Check ---
+        if (bundleData.isForceCompleted === true) {
+          status = "Force Completed by Admin";
+        } else if (bundleData.isUserCompleted === true) {
+          status = "Completed by User";
+        } else if (recordsProcessed === 250) {
+          status = "Completed by User";
+        }
+
+        if (status) {
+          bundleCompletionSummary.push({
+            userName: userName || "Unknown User",
+            location,
+            taluka,
+            bundleNo,
+            recordsProcessed,
+            status,
+          });
+          handledBundles.add(uniqueBundleId);
+        }
+      }
+    }
+  }
+
+  // 2. Find all remaining "In Progress" bundles from the user states.
   for (const userId in userStatesData) {
     const user = userMap.get(userId);
     if (user && userStatesData[userId].activeBundles) {
       for (const taluka in userStatesData[userId].activeBundles) {
         const activeBundle = userStatesData[userId].activeBundles[taluka];
-        const location = user.location;
-        const bundleNo = activeBundle.bundleNo;
+        const uniqueBundleId = `${user.location}-${taluka}-${activeBundle.bundleNo}`;
 
-        let pdfsRequiredInBundle = 0;
-
-        const allBundles = processedRecordsData?.[location]?.[taluka] || {};
-        const matchingKey = Object.keys(allBundles).find(
-          (key) =>
-            key.toString() === bundleNo.toString() ||
-            key.toString().endsWith(bundleNo.toString()) ||
-            key.toString().includes(bundleNo.toString())
-        );
-
-        if (matchingKey) {
-          const processedBundleRecords = allBundles[matchingKey];
-          for (const recordId in processedBundleRecords) {
-            const record = processedBundleRecords[recordId];
-            if (record && typeof record === "object") {
-              const pdfKey = Object.keys(record).find(
-                (k) => k.trim().toLowerCase() === "PDf Required"
-              );
-              if (pdfKey && record[pdfKey].toLowerCase() === "yes") {
-                pdfsRequiredInBundle++;
-              }
-            }
-          }
+        // If the bundle was already marked as complete, skip it.
+        if (handledBundles.has(uniqueBundleId)) {
+          continue;
         }
 
         bundleCompletionSummary.push({
           userName: user.name,
-          location,
+          location: user.location,
           taluka,
-          bundleNo,
+          bundleNo: activeBundle.bundleNo,
           recordsProcessed: activeBundle.count || 0,
-          pdfsRequired: pdfsRequiredInBundle,
           status: "In Progress",
         });
       }

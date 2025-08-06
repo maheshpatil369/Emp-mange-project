@@ -4,77 +4,89 @@ import * as firebaseService from "../../services/firebase.service";
 import { Readable } from "stream";
 
 /**
- * Controller to handle Excel file uploads.
- * It parses the file and saves its content to the database.
+ * Controller to handle large Excel file uploads in batches.
+ * It parses the file, creates a metadata record, and then uploads the content
+ * in smaller chunks to avoid hitting Firebase's write size limits.
  */
-
 export const uploadFile = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   try {
-    //  Check if a file was actually uploaded by Multer.
     if (!req.file) {
       return res
         .status(400)
         .json({ message: "Bad Request: No file uploaded." });
     }
 
-    // Extract location and file metadata.
     const location = req.params.location;
-    const fileData = {
+    const BATCH_SIZE = 20000; // You can adjust this size as needed
+
+    // 1. Create the metadata record first to get a fileId
+    const fileMetadata = {
       name: req.file.originalname,
       size: req.file.size,
       location: location,
       uploadDate: new Date().toISOString(),
-      content: [] as any[], // Initialize content as an empty array
     };
 
-    // Parse the Excel file from a stream.
+    const fileId = await firebaseService.createFileMetadataInDB(
+      location as string,
+      fileMetadata
+    );
+
+    // 2. Parse the entire Excel file into an in-memory array
     const workbook = new ExcelJS.Workbook();
     const stream = Readable.from(req.file.buffer);
-    await workbook.xlsx.read(stream); // Use .read() for streams
+    await workbook.xlsx.read(stream);
 
-    const worksheet = workbook.worksheets[0]; // Get the first worksheet
-
+    const worksheet = workbook.worksheets[0];
     if (!worksheet) {
-      return res.status(402).json({ message: "worksheet doesnt exist" });
+      return res
+        .status(400)
+        .json({ message: "Bad Request: No worksheet found in the file." });
     }
 
-    // Convert worksheet rows to a JSON array.
-    const headers = (worksheet.getRow(1).values as string[]).filter(Boolean); // Filter out any empty header cells
+    const headers = (worksheet.getRow(1).values as string[]).filter(Boolean);
+    const allRows: any[] = [];
+
     worksheet.eachRow((row, rowNumber) => {
-      // Skip the header row
       if (rowNumber > 1) {
+        // Skip header row
         const rowData: { [key: string]: any } = {};
         const values = row.values as any[];
-
         headers.forEach((header, index) => {
           const cellValue = values[index + 1];
           rowData[header] =
             cellValue !== undefined && cellValue !== null ? cellValue : null;
         });
 
-        // Only push the row if it contains some data
         if (Object.values(rowData).some((v) => v !== null)) {
-          fileData.content.push(rowData);
+          allRows.push(rowData);
         }
       }
     });
 
-    // Call the service to save the parsed data to Firebase.
-    const fileId = await firebaseService.saveUploadedFileToDB(
-      location as string,
-      fileData
-    );
+    // 3. Upload the data in batches
+    const uploadPromises = [];
+    for (let i = 0; i < allRows.length; i += BATCH_SIZE) {
+      const batch = allRows.slice(i, i + BATCH_SIZE);
+      // Add the promise for this batch upload to our array
+      uploadPromises.push(
+        firebaseService.saveContentBatchToDB(location as string, fileId, batch)
+      );
+    }
+
+    // Wait for all batch uploads to complete
+    await Promise.all(uploadPromises);
 
     return res.status(201).json({
       message: `File uploaded successfully for ${location}.`,
       fileId: fileId,
-      recordsParsed: fileData.content.length,
+      recordsParsed: allRows.length,
     });
   } catch (error) {
-    console.error("Error uploading file:", error);
+    console.error("Error uploading file in batches:", error);
     return res
       .status(500)
       .json({ message: "Internal Server Error: Could not process file." });
@@ -340,7 +352,7 @@ export const getAssignedFile = async (
     const fileContent = await firebaseService.getAssignedFileContentFromDB(
       userId
     );
-    
+
     if (!user || user.canDownloadFiles === false) {
       return res
         .status(403)
