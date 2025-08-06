@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'home/home_screen.dart';
 import 'data_management/data_screen.dart';
 import 'profile/profile_screen.dart';
+import '../widgets/connectivity_indicator.dart';
 // import '../widgets/comman/custom_drawer.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -36,6 +37,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         backgroundColor: const Color(0xFF22B14C), // ✅ Green header
         elevation: 1,
         foregroundColor: Colors.white, // ✅ White text/icon
+        actions: const [
+          ConnectivityIndicator(),
+        ],
       ),
       // drawer: const CustomDrawer(),
 

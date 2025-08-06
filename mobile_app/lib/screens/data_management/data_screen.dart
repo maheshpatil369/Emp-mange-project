@@ -1,9 +1,11 @@
 // lib/screens/data_management/data_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/data_provider.dart';
 import '../../models/member_model.dart';
+import '../../services/connectivity_service.dart';
 
 class DataScreen extends StatefulWidget {
   const DataScreen({super.key});
@@ -23,6 +25,9 @@ class _DataScreenState extends State<DataScreen> {
   bool _isLoadingRecords = false;
   List<Map<String, dynamic>> _tempRecords = [];
   bool _showTempRecords = false;
+  bool _isSyncCooldown = false; // Add cooldown state for sync button
+  int _syncCooldownSeconds = 0; // Track remaining cooldown seconds
+  Timer? _syncCooldownTimer; // Timer for sync cooldown
 
   @override
   void initState() {
@@ -46,6 +51,35 @@ class _DataScreenState extends State<DataScreen> {
     } catch (e) {
       print('Error loading temp records: $e');
     }
+  }
+
+  // Start the sync cooldown timer
+  void _startSyncCooldown() {
+    setState(() {
+      _isSyncCooldown = true;
+      _syncCooldownSeconds = 10; // 10 seconds cooldown
+    });
+
+    _syncCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _syncCooldownSeconds--;
+      });
+
+      if (_syncCooldownSeconds <= 0) {
+        setState(() {
+          _isSyncCooldown = false;
+          _syncCooldownSeconds = 0;
+        });
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncCooldownTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   // Check if record has a unique ID (either just generated or previously existing)
@@ -397,13 +431,27 @@ class _DataScreenState extends State<DataScreen> {
                           // ),
                           const SizedBox(width: 12), // spacing between buttons
                           ElevatedButton.icon(
-                            icon: const Icon(Icons.sync),
-                            label: const Text('Sync to Server'),
+                            icon: _isSyncCooldown
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white),
+                                    ),
+                                  )
+                                : const Icon(Icons.sync),
+                            label: Text(_isSyncCooldown
+                                ? 'Wait ${_syncCooldownSeconds}s'
+                                : 'Sync to Server'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
+                              backgroundColor:
+                                  _isSyncCooldown ? Colors.grey : Colors.green,
                               foregroundColor: Colors.white,
                             ),
-                            onPressed: _tempRecords.isNotEmpty
+                            onPressed: (_tempRecords.isNotEmpty &&
+                                    !_isSyncCooldown)
                                 ? () async {
                                     try {
                                       final provider =
@@ -456,11 +504,15 @@ class _DataScreenState extends State<DataScreen> {
                                           _tempRecords = [];
                                           _showTempRecords = false;
                                         });
+
+                                        // Start cooldown timer after successful sync
+                                        _startSyncCooldown();
+
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                                'Successfully synced $recordCount records to server!'),
+                                                'Successfully synced $recordCount records to server! Next sync available in 10 seconds.'),
                                             backgroundColor: Colors.green,
                                           ),
                                         );
@@ -757,7 +809,7 @@ class _DataScreenState extends State<DataScreen> {
     final bundles = dataProvider.serverBundles;
 
     if (bundles.isEmpty) {
-      final message = dataProvider.isOffline
+      final message = isOffline
           ? 'No bundles found in local storage.'
           : 'No active bundles found on server.';
       return Center(child: Text(message));
@@ -765,7 +817,7 @@ class _DataScreenState extends State<DataScreen> {
 
     return Column(
       children: [
-        if (dataProvider.isOffline)
+        if (isOffline)
           const Padding(
             padding: EdgeInsets.all(8.0),
             child: Row(
@@ -970,101 +1022,99 @@ class _DataScreenState extends State<DataScreen> {
   //   );
   // }
 
-Widget _buildRecordDetails() {
-  final record = _selectedRecord!;
-  final fields = [
-    {'label': 'Farmer Name', 'key': 'Farmer Name'},
-    {'label': 'Crop Name', 'key': 'Crop Name'},
-    {'label': 'Intimation No', 'key': 'Intimation No'},
-    {'label': 'Correction Details', 'key': 'Correction Details'},
-    {'label': 'UniqueId', 'key': 'UniqueId'},
-    {'label': 'PDf Required', 'key': 'PDf Required'},
-    {'label': 'Search from', 'key': 'Search from'},
-    {'label': 'Taluka', 'key': 'Taluka'},
-  ];
+  Widget _buildRecordDetails() {
+    final record = _selectedRecord!;
+    final fields = [
+      {'label': 'Farmer Name', 'key': 'Farmer Name'},
+      {'label': 'Crop Name', 'key': 'Crop Name'},
+      {'label': 'Intimation No', 'key': 'Intimation No'},
+      {'label': 'Correction Details', 'key': 'Correction Details'},
+      {'label': 'UniqueId', 'key': 'UniqueId'},
+      {'label': 'PDf Required', 'key': 'PDf Required'},
+      {'label': 'Search from', 'key': 'Search from'},
+      {'label': 'Taluka', 'key': 'Taluka'},
+    ];
 
-  return Column(
-    children: fields.map((field) {
-      final isPdfRequired = field['key'] == 'PDf Required';
-      final isSearchFrom = field['key'] == 'Search from';
-      final isUniqueId = field['key'] == 'UniqueId';
-      String value = record[field['key']]?.toString() ?? '';
-      if (isPdfRequired) {
-        if (value.toLowerCase() == 'yes') {
-          value = 'Yes';
-        } else {
-          value = 'No';
+    return Column(
+      children: fields.map((field) {
+        final isPdfRequired = field['key'] == 'PDf Required';
+        final isSearchFrom = field['key'] == 'Search from';
+        final isUniqueId = field['key'] == 'UniqueId';
+        String value = record[field['key']]?.toString() ?? '';
+        if (isPdfRequired) {
+          if (value.toLowerCase() == 'yes') {
+            value = 'Yes';
+          } else {
+            value = 'No';
+          }
         }
-      }
 
-      return Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          // ✅ Background color updated for PDf Required == Yes
-          color: isPdfRequired
-              ? (value.toLowerCase() == 'yes'
-                  ? Colors.red
-                  : Colors.lightGreen[50])
-              : isSearchFrom
-                  ? Colors.green[50]
-                  : isUniqueId
-                      ? Colors.blue[50]
-                      : Colors.grey[50],
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            // ✅ Border color updated for PDf Required == Yes
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            // ✅ Background color updated for PDf Required == Yes
             color: isPdfRequired
                 ? (value.toLowerCase() == 'yes'
-                    ? Colors.red.shade700
-                    : Colors.lightGreen[200]!)
+                    ? Colors.red
+                    : Colors.lightGreen[50])
                 : isSearchFrom
-                    ? Colors.green[200]!
+                    ? Colors.green[50]
                     : isUniqueId
-                        ? Colors.blue[200]!
-                        : Colors.grey[200]!,
+                        ? Colors.blue[50]
+                        : Colors.grey[50],
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              // ✅ Border color updated for PDf Required == Yes
+              color: isPdfRequired
+                  ? (value.toLowerCase() == 'yes'
+                      ? Colors.red.shade700
+                      : Colors.lightGreen[200]!)
+                  : isSearchFrom
+                      ? Colors.green[200]!
+                      : isUniqueId
+                          ? Colors.blue[200]!
+                          : Colors.grey[200]!,
+            ),
           ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 120,
-              child: Text(
-                '${field['label']}:',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 120,
+                child: Text(
+                  '${field['label']}:',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-            ),
-            Expanded(
-              child: Text(
-                value,
-                style: TextStyle(
-                  fontSize: isUniqueId ? 16 : 12,
-                  fontWeight: isUniqueId ? FontWeight.bold : FontWeight.w600,
-                  // ✅ Text color updated for PDf Required == Yes
-                  color: isPdfRequired && value.toLowerCase() == 'yes'
-                      ? Colors.white
-                      : isPdfRequired
-                          ? Colors.black87
-                          : isSearchFrom
-                              ? Colors.green[700]
-                              : isUniqueId
-                                  ? Colors.blue[700]
-                                  : Colors.black87,
+              Expanded(
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: isUniqueId ? 16 : 12,
+                    fontWeight: isUniqueId ? FontWeight.bold : FontWeight.w600,
+                    // ✅ Text color updated for PDf Required == Yes
+                    color: isPdfRequired && value.toLowerCase() == 'yes'
+                        ? Colors.white
+                        : isPdfRequired
+                            ? Colors.black87
+                            : isSearchFrom
+                                ? Colors.green[700]
+                                : isUniqueId
+                                    ? Colors.blue[700]
+                                    : Colors.black87,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      );
-    }).toList(),
-  );
-}
-
-
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
 
   Widget _buildActionButtons() {
     return Row(
@@ -1089,6 +1139,8 @@ Widget _buildRecordDetails() {
                         (b) => b['taluka'] == taluka && (b['count'] ?? 0) < 250,
                         orElse: () => {},
                       );
+                      print("Bundle for $taluka: $bundle");
+                      print("Selected Record: $_selectedRecord");
 
                       if (bundle.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1103,6 +1155,7 @@ Widget _buildRecordDetails() {
 
                       final uniqueId =
                           await provider.generateUniqueId(_selectedRecord!);
+                      print("Generated Unique ID: $uniqueId");
 
                       setState(() {
                         _isUniqueIdGenerated = true;

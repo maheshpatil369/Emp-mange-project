@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../api/api_service.dart';
 import '../helpers/database_helper.dart';
 import '../models/member_model.dart';
+import '../services/connectivity_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -63,7 +64,6 @@ class DataProvider with ChangeNotifier {
   final List<Member> _records = [];
   List<Map<String, dynamic>> _serverBundles = [];
   bool _isLoadingBundles = false;
-  bool _isOffline = false;
   final bool _isLoadingRecords = false;
 
   // Getters
@@ -73,7 +73,7 @@ class DataProvider with ChangeNotifier {
   bool get isLoadingConfig => _isLoadingConfig;
   bool get isAssigningBundle => _isAssigningBundle;
   bool get isLoadingBundles => _isLoadingBundles;
-  bool get isOffline => _isOffline;
+  bool get isOffline => connectivityService.isOffline;
   List<Map<String, dynamic>> get fullLocationData => _fullLocationData;
 
   // Modify the constructor to print database path
@@ -89,6 +89,10 @@ class DataProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      // Try to load from SharedPreferences first (offline fallback)
+      await _loadConfigFromPrefs();
+
+      // Try to fetch fresh data from API
       final responseData = await _apiService.fetchConfig();
 
       // Safely extract data with null checks
@@ -122,23 +126,67 @@ class DataProvider with ChangeNotifier {
         _selectedDistrictSlug = _fullLocationData.first['slug'];
       }
 
+      // Save to SharedPreferences for offline access
+      await _saveConfigToPrefs();
+
       print('Loaded Location Data: $_fullLocationData');
       print('Talukas Map: $talukasMap');
     } catch (e, stackTrace) {
       _errorMessage = 'Failed to load configuration: ${e.toString()}';
       print('Configuration Load Error: $_errorMessage');
       print('Stacktrace: $stackTrace');
-      _fullLocationData = [];
+
+      // If API fails but we have no cached data, _fullLocationData will remain empty
+      // The generateUniqueId method will use hardcoded fallbacks in this case
+      if (_fullLocationData.isEmpty) {
+        print(
+            'No cached config data available, unique ID generation will use hardcoded fallbacks');
+      }
     } finally {
       _isLoadingConfig = false;
       notifyListeners();
     }
   }
 
+  // Load configuration from SharedPreferences (offline fallback)
+  Future<void> _loadConfigFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final configJson = prefs.getString('locationConfig');
+
+      if (configJson != null) {
+        final configData = json.decode(configJson) as List;
+        _fullLocationData = List<Map<String, dynamic>>.from(configData);
+
+        if (_fullLocationData.isNotEmpty) {
+          _selectedDistrictSlug = _fullLocationData.first['slug'];
+        }
+
+        print(
+            'Loaded ${_fullLocationData.length} locations from SharedPreferences cache');
+      }
+    } catch (e) {
+      print('Error loading config from SharedPreferences: $e');
+    }
+  }
+
+  // Save configuration to SharedPreferences
+  Future<void> _saveConfigToPrefs() async {
+    try {
+      if (_fullLocationData.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final configJson = json.encode(_fullLocationData);
+        await prefs.setString('locationConfig', configJson);
+        print('Configuration saved to SharedPreferences cache');
+      }
+    } catch (e) {
+      print('Error saving config to SharedPreferences: $e');
+    }
+  }
+
   Future<void> fetchAndSyncBundles() async {
     _isLoadingBundles = true;
     _errorMessage = null;
-    _isOffline = false;
     notifyListeners();
 
     try {
@@ -184,7 +232,6 @@ class DataProvider with ChangeNotifier {
       // If response only contains a 'message', treat as no bundles
       if (serverResponse.containsKey('message') && serverResponse.length == 1) {
         print('No active bundles for user on server.');
-        _isOffline = false;
         _isLoadingBundles = false;
         notifyListeners();
         return;
@@ -246,7 +293,6 @@ class DataProvider with ChangeNotifier {
 
       // 6. Refresh local state and show updated data
       _serverBundles = await _databaseHelper.getActiveLocalBundles();
-      _isOffline = false;
 
       // 7. Save the synced bundles to SharedPreferences (with preserved counts)
       await _saveBundlesToPrefs(_serverBundles);
@@ -257,7 +303,6 @@ class DataProvider with ChangeNotifier {
       _errorMessage =
           'Failed to sync with server. Showing local data: ${e.toString()}';
       print('Error syncing with server, using local data: $e');
-      _isOffline = true;
       // Use local data as fallback
       _serverBundles = await _databaseHelper.getActiveLocalBundles();
     } finally {
@@ -457,7 +502,6 @@ class DataProvider with ChangeNotifier {
 
   static const Map<String, String> _talukaAbbreviations = {
     // Ahilyanagar talukas
-    'Ahmednagar': 'AH',
     'Jamkhed': 'JA',
     'Karjat': 'KA',
     'Kopargaon': 'KO',
@@ -468,9 +512,10 @@ class DataProvider with ChangeNotifier {
     'Rahuri': 'RH',
     'Sangamner': 'SA',
     'Shevgaon': 'SH',
-    'Shirdi': 'SI',
-    'Shrigonda': 'SR',
+    'Shrirampur': 'SR',
+    'Shrigonda': 'SG',
     'Akole': 'AK',
+    'Nagar': 'NA',
 
     // Chhatrapati Sambhajinagar talukas
     'Aurangabad': 'AU',
@@ -482,6 +527,36 @@ class DataProvider with ChangeNotifier {
     'Vaijapur': 'VA',
     'Phulambri': 'PH',
     'Soegaon': 'SO',
+  };
+
+  // Hardcoded fallback mapping for taluka to location slug (used in offline mode)
+  static const Map<String, String> _talukaToLocationMapping = {
+    // Ahilyanagar talukas
+    'Ahmednagar': 'ahilyanagar',
+    'Jamkhed': 'ahilyanagar',
+    'Karjat': 'ahilyanagar',
+    'Kopargaon': 'ahilyanagar',
+    'Nevasa': 'ahilyanagar',
+    'Parner': 'ahilyanagar',
+    'Pathardi': 'ahilyanagar',
+    'Rahata': 'ahilyanagar',
+    'Rahuri': 'ahilyanagar',
+    'Sangamner': 'ahilyanagar',
+    'Shevgaon': 'ahilyanagar',
+    'Shirdi': 'ahilyanagar',
+    'Shrigonda': 'ahilyanagar',
+    'Akole': 'ahilyanagar',
+
+    // Chhatrapati Sambhajinagar talukas
+    'Aurangabad': 'chhatrapati-sambhajinagar',
+    'Gangapur': 'chhatrapati-sambhajinagar',
+    'Kannad': 'chhatrapati-sambhajinagar',
+    'Khultabad': 'chhatrapati-sambhajinagar',
+    'Paithan': 'chhatrapati-sambhajinagar',
+    'Sillod': 'chhatrapati-sambhajinagar',
+    'Vaijapur': 'chhatrapati-sambhajinagar',
+    'Phulambri': 'chhatrapati-sambhajinagar',
+    'Soegaon': 'chhatrapati-sambhajinagar',
   };
 
   Future<void> completeBundleForTaluka(String taluka) async {
@@ -550,21 +625,36 @@ class DataProvider with ChangeNotifier {
       final talukaName = record['Taluka']?.toString().trim();
       if (talukaName == null || talukaName.isEmpty) {
         throw Exception('Taluka name is required for generating unique ID');
+      } else {
+        print('Generating unique ID for taluka: $talukaName');
       }
 
-      // Get taluka and location abbreviations (existing logic)
+      // Get taluka abbreviation (existing logic)
       final talukaAbbr = _talukaAbbreviations[talukaName];
       if (talukaAbbr == null) {
         throw Exception('No abbreviation found for taluka: $talukaName');
+      } else {
+        print('Taluka abbreviation found: $talukaAbbr');
       }
 
       String? locationSlug;
-      for (final location in _fullLocationData) {
-        final talukas = List<String>.from(location['talukas'] ?? []);
-        if (talukas.contains(talukaName)) {
-          locationSlug = location['slug'];
-          break;
+
+      // Try to find location slug from loaded configuration data first (online mode)
+      if (_fullLocationData.isNotEmpty) {
+        for (final location in _fullLocationData) {
+          final talukas = List<String>.from(location['talukas'] ?? []);
+          if (talukas.contains(talukaName)) {
+            locationSlug = location['slug'];
+            break;
+          }
         }
+      }
+
+      // If not found in loaded data, use hardcoded fallback mapping (offline mode)
+      if (locationSlug == null) {
+        locationSlug = _talukaToLocationMapping[talukaName];
+        print(
+            'Using fallback location mapping for taluka: $talukaName -> $locationSlug');
       }
 
       if (locationSlug == null) {
@@ -967,7 +1057,6 @@ class DataProvider with ChangeNotifier {
       _serverBundles.clear();
       _records.clear();
       _errorMessage = null;
-      _isOffline = false;
 
       notifyListeners();
       print('Runtime user data cleared successfully.');
@@ -1007,7 +1096,6 @@ class DataProvider with ChangeNotifier {
       _serverBundles.clear();
       _records.clear();
       _errorMessage = null;
-      _isOffline = false;
 
       notifyListeners();
       print('User-specific data cleared successfully.');
