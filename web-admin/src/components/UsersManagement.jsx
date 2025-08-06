@@ -9,6 +9,7 @@ import {
   Edit,
   Trash2,
   Download,
+  CloudOff,
   // DownloadOff
 } from "lucide-react";
 import apiClient from "../lib/axios";
@@ -74,10 +75,12 @@ const UsersManagement = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
-        <p className="ml-2 text-gray-600">Loading Users...</p>
-      </div>
+  <div className="flex flex-col items-center justify-center min-h-screen space-y-3">
+  <Loader2 className="w-10 h-10 animate-spin text-green-500" />
+  <p className="text-black font-medium text-lg">Loading Users...</p>
+</div>
+
+
     );
   }
 
@@ -164,7 +167,9 @@ const UsersManagement = () => {
                       {user.canDownloadFiles ? (
                         <Download className="w-5 h-5" />
                       ) : (
-                        <h1>Download off</h1>
+                       <CloudOff className="w-6 h-6 text-red-500" />
+
+
                         // <DownloadOff className="w-5 h-5" /> // CORRECTED: Re-added the correct icon
                       )}
                     </button>
@@ -174,7 +179,8 @@ const UsersManagement = () => {
                       className="text-indigo-600 hover:text-indigo-900"
                       title="Edit User"
                     >
-                      <Edit className="w-5 h-5" />
+                      {/* <Edit className="w-5 h-5" /> */}
+                      <Edit className="w-5 h-5 text-purple-600 hover:text-purple-800 cursor-pointer" />
                     </button>
                     <button
                       onClick={() => setDeletingUser(user)}
@@ -303,13 +309,35 @@ const CreateUserModal = ({ closeModal, onUserCreated }) => {
               required
               className="p-2 border rounded"
             />
-            <input
+            {/* <input
               name="mobile"
               placeholder="Mobile Number"
               onChange={handleChange}
               required
               className="p-2 border rounded"
-            />
+            /> */}
+
+            <div className="flex items-center border rounded overflow-hidden w-full max-w-xs">
+  {/* Fixed +91 Prefix */}
+  <span className="px-2 bg-gray-100 text-gray-700 border-r select-none">+91</span>
+  
+  {/* Mobile Number Input */}
+  <input
+    type="tel"
+    name="mobile"
+    value={formData.mobile}
+    placeholder="Mobile Number"
+    onChange={(e) => {
+      // Allow only numbers and limit to 10 digits
+      const numericValue = e.target.value.replace(/\D/g, "").slice(0, 10);
+      handleChange({ target: { name: "mobile", value: numericValue } });
+    }}
+    required
+    className="flex-1 p-2 outline-none"
+  />
+</div>
+
+
             <select
               name="location"
               onChange={handleChange}
@@ -460,14 +488,36 @@ const EditUserModal = ({ user, closeModal, onUserUpdated }) => {
               required
               className="p-2 border rounded"
             />
-            <input
+            {/* <input
               name="mobile"
               value={formData.mobile}
               placeholder="Mobile Number"
               onChange={handleChange}
               required
               className="p-2 border rounded"
-            />
+            /> */}
+
+<div className="flex items-center border rounded overflow-hidden w-full max-w-xs">
+  {/* Fixed +91 Prefix */}
+  <span className="px-2 bg-gray-100 text-gray-700 border-r select-none">+91</span>
+  
+  {/* Mobile Number Input */}
+  <input
+    type="tel"
+    name="mobile"
+    value={formData.mobile}
+    placeholder="Mobile Number"
+    onChange={(e) => {
+      // Allow only numbers and limit to 10 digits
+      const numericValue = e.target.value.replace(/\D/g, "").slice(0, 10);
+      handleChange({ target: { name: "mobile", value: numericValue } });
+    }}
+    required
+    className="flex-1 p-2 outline-none"
+  />
+</div>
+
+
             <select
               name="location"
               value={formData.location}

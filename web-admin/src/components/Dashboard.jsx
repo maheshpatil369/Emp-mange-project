@@ -49,10 +49,13 @@ const DashboardPage = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
-        <p className="ml-2 text-gray-600">Loading Dashboard...</p>
-      </div>
+ <div className="flex flex-col items-center justify-center min-h-screen space-y-3 bg-gray-50">
+  <Loader2 className="w-10 h-10 animate-spin text-green-500" />
+  <p className="text-black font-medium text-lg">Loading Dashboard...</p>
+</div>
+
+
+
     );
   }
 
