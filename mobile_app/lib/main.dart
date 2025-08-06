@@ -83,6 +83,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile_app/providers/auth_provider.dart';
 import 'package:mobile_app/providers/data_provider.dart';
+import 'package:mobile_app/services/connectivity_service.dart';
 import 'package:mobile_app/screens/auth/login_screen.dart';
 import 'package:mobile_app/screens/main_navigation_screen.dart';
 import 'package:mobile_app/screens/profile/profile_screen.dart';
@@ -121,6 +122,9 @@ void main() async {
   // Initialize AuthProvider and load user from prefs
   final authProvider = AuthProvider();
   await authProvider.checkLoginStatus();
+
+  // Initialize connectivity service
+  await connectivityService.initialize();
 
   final dataProvider = DataProvider();
   // Only load bundles if user is authenticated

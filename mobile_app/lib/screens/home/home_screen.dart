@@ -1,7 +1,9 @@
 // lib/screens/home/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/data_provider.dart';
+import '../../services/connectivity_service.dart';
 import '../../api/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -24,22 +26,69 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // Add this method to get user's district
+  // Add this method to get user's district with caching
   void _loadUserDistrict() async {
     try {
-      String location = await ApiService().getUserLocation();
-      if (location == "ahilyanagar") {
-        _userDistrict = "Ahilyanagar";
-        print('User district set to Ahilyanagar');
-      } else if (location == "chhatrapati-sambhajinagar") {
-        _userDistrict = "Chhatrapati Sambhajinagar";
-        print('User district set to Chhatrapati Sambhajinagar');
-      } else {
-        _userDistrict = location;
+      // First, try to load from SharedPreferences (offline fallback)
+      final prefs = await SharedPreferences.getInstance();
+      final cachedDistrict = prefs.getString('userDistrict');
+
+      if (cachedDistrict != null) {
+        setState(() {
+          _userDistrict = cachedDistrict;
+        });
+        print('Loaded cached user district: $cachedDistrict');
       }
+
+      // Try to fetch fresh data from API
+      String location = await ApiService().getUserLocation();
+      String displayName;
+
+      if (location == "ahilyanagar") {
+        displayName = "Ahilyanagar";
+      } else if (location == "chhatrapati-sambhajinagar") {
+        displayName = "Chhatrapati Sambhajinagar";
+      } else {
+        displayName = location;
+      }
+
+      // Update state and cache the result
+      setState(() {
+        _userDistrict = displayName;
+      });
+
+      // Save to SharedPreferences for offline access
+      await prefs.setString('userDistrict', displayName);
+      print('User district fetched and cached: $displayName');
     } catch (e) {
       print('Error fetching user district: $e');
-      _userDistrict = 'Unknown District'; // Fallback value
+
+      // If we have cached data, use it; otherwise, use fallback
+      if (_userDistrict == null) {
+        final prefs = await SharedPreferences.getInstance();
+        final cachedDistrict = prefs.getString('userDistrict');
+
+        setState(() {
+          _userDistrict = cachedDistrict ?? 'Unknown District';
+        });
+
+        if (cachedDistrict != null) {
+          print('Using cached district due to API error: $cachedDistrict');
+        } else {
+          print('No cached district available, using fallback');
+        }
+      }
+    }
+  }
+
+  // Static method to clear cached district data (useful for logout)
+  static Future<void> clearCachedDistrict() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('userDistrict');
+      print('Cached user district cleared');
+    } catch (e) {
+      print('Error clearing cached district: $e');
     }
   }
 
@@ -55,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final result = await dataProvider.assignWorkBundle(_selectedTaluka!);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result ?? "No message returned from API.")),
+        SnackBar(content: Text(result)),
       );
       setState(() {
         _selectedTaluka = null;
@@ -81,8 +130,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Check if there's an error and no data to display.
           // Fallback to offline display.
-          bool isOffline = dataProvider.errorMessage != null &&
-              dataProvider.districts.isEmpty;
+          bool isOfflinePage = isOffline ||
+              (dataProvider.errorMessage != null &&
+                  dataProvider.errorMessage!
+                      .contains('Failed to load configuration'));
 
           // List<String> availableTalukas = dataProvider.filteredTalukas;
           String? userDistrictSlug;
@@ -106,6 +157,40 @@ class _HomeScreenState extends State<HomeScreen> {
               orElse: () => {},
             );
             availableTalukas = List<String>.from(location['talukas'] ?? []);
+          } else if (_userDistrict != null &&
+              _userDistrict != 'Unknown District') {
+            // Fallback: If we have district name but no slug, try to get talukas from hardcoded data
+            if (_userDistrict == 'Ahilyanagar') {
+              availableTalukas = [
+                'Ahmednagar',
+                'Jamkhed',
+                'Karjat',
+                'Kopargaon',
+                'Nevasa',
+                'Parner',
+                'Pathardi',
+                'Rahata',
+                'Rahuri',
+                'Sangamner',
+                'Shevgaon',
+                'Shirdi',
+                'Shrigonda',
+                'Akole'
+              ];
+            } else if (_userDistrict == 'Chhatrapati Sambhajinagar') {
+              availableTalukas = [
+                'Aurangabad',
+                'Gangapur',
+                'Kannad',
+                'Khultabad',
+                'Paithan',
+                'Sillod',
+                'Vaijapur',
+                'Phulambri',
+                'Soegaon'
+              ];
+            }
+            print('Using hardcoded talukas for district: $_userDistrict');
           }
 
           return Padding(
@@ -130,13 +215,32 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.location_on, color: Colors.green),
+                        Icon(Icons.location_on,
+                            color: isOfflinePage ? Colors.orange : Colors.green),
                         const SizedBox(width: 8),
-                        Text(
-                          _userDistrict ?? 'Loading district...',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _userDistrict ?? 'Loading district...',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (isOfflinePage &&
+                                  _userDistrict != null &&
+                                  _userDistrict != 'Unknown District')
+                                const Text(
+                                  'Cached data - offline mode',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ],
@@ -157,13 +261,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       );
                     }).toList(),
-                    onChanged: isOffline
-                        ? null
-                        : (newValue) {
-                            setState(() {
-                              _selectedTaluka = newValue;
-                            });
-                          },
+                    onChanged: (newValue) {
+                      setState(() {
+                        _selectedTaluka = newValue;
+                      });
+                    },
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       labelText: 'Taluka',
@@ -173,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: _assignBundle,
+                    onPressed: isOfflinePage ? null : _assignBundle,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 15),
                     ),
@@ -185,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                   ),
                   // Offline Message
-                  if (isOffline)
+                  if (isOfflinePage)
                     Padding(
                       padding: const EdgeInsets.only(top: 20.0),
                       child: Text(

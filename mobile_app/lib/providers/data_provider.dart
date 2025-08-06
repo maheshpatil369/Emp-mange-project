@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../api/api_service.dart';
 import '../helpers/database_helper.dart';
 import '../models/member_model.dart';
+import '../services/connectivity_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -63,7 +64,6 @@ class DataProvider with ChangeNotifier {
   final List<Member> _records = [];
   List<Map<String, dynamic>> _serverBundles = [];
   bool _isLoadingBundles = false;
-  bool _isOffline = false;
   final bool _isLoadingRecords = false;
 
   // Getters
@@ -73,7 +73,7 @@ class DataProvider with ChangeNotifier {
   bool get isLoadingConfig => _isLoadingConfig;
   bool get isAssigningBundle => _isAssigningBundle;
   bool get isLoadingBundles => _isLoadingBundles;
-  bool get isOffline => _isOffline;
+  bool get isOffline => connectivityService.isOffline;
   List<Map<String, dynamic>> get fullLocationData => _fullLocationData;
 
   // Modify the constructor to print database path
@@ -89,6 +89,10 @@ class DataProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      // Try to load from SharedPreferences first (offline fallback)
+      await _loadConfigFromPrefs();
+
+      // Try to fetch fresh data from API
       final responseData = await _apiService.fetchConfig();
 
       // Safely extract data with null checks
@@ -122,23 +126,67 @@ class DataProvider with ChangeNotifier {
         _selectedDistrictSlug = _fullLocationData.first['slug'];
       }
 
+      // Save to SharedPreferences for offline access
+      await _saveConfigToPrefs();
+
       print('Loaded Location Data: $_fullLocationData');
       print('Talukas Map: $talukasMap');
     } catch (e, stackTrace) {
       _errorMessage = 'Failed to load configuration: ${e.toString()}';
       print('Configuration Load Error: $_errorMessage');
       print('Stacktrace: $stackTrace');
-      _fullLocationData = [];
+
+      // If API fails but we have no cached data, _fullLocationData will remain empty
+      // The generateUniqueId method will use hardcoded fallbacks in this case
+      if (_fullLocationData.isEmpty) {
+        print(
+            'No cached config data available, unique ID generation will use hardcoded fallbacks');
+      }
     } finally {
       _isLoadingConfig = false;
       notifyListeners();
     }
   }
 
+  // Load configuration from SharedPreferences (offline fallback)
+  Future<void> _loadConfigFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final configJson = prefs.getString('locationConfig');
+
+      if (configJson != null) {
+        final configData = json.decode(configJson) as List;
+        _fullLocationData = List<Map<String, dynamic>>.from(configData);
+
+        if (_fullLocationData.isNotEmpty) {
+          _selectedDistrictSlug = _fullLocationData.first['slug'];
+        }
+
+        print(
+            'Loaded ${_fullLocationData.length} locations from SharedPreferences cache');
+      }
+    } catch (e) {
+      print('Error loading config from SharedPreferences: $e');
+    }
+  }
+
+  // Save configuration to SharedPreferences
+  Future<void> _saveConfigToPrefs() async {
+    try {
+      if (_fullLocationData.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final configJson = json.encode(_fullLocationData);
+        await prefs.setString('locationConfig', configJson);
+        print('Configuration saved to SharedPreferences cache');
+      }
+    } catch (e) {
+      print('Error saving config to SharedPreferences: $e');
+    }
+  }
+
   Future<void> fetchAndSyncBundles() async {
     _isLoadingBundles = true;
     _errorMessage = null;
-    _isOffline = false;
     notifyListeners();
 
     try {
@@ -184,7 +232,6 @@ class DataProvider with ChangeNotifier {
       // If response only contains a 'message', treat as no bundles
       if (serverResponse.containsKey('message') && serverResponse.length == 1) {
         print('No active bundles for user on server.');
-        _isOffline = false;
         _isLoadingBundles = false;
         notifyListeners();
         return;
@@ -246,7 +293,6 @@ class DataProvider with ChangeNotifier {
 
       // 6. Refresh local state and show updated data
       _serverBundles = await _databaseHelper.getActiveLocalBundles();
-      _isOffline = false;
 
       // 7. Save the synced bundles to SharedPreferences (with preserved counts)
       await _saveBundlesToPrefs(_serverBundles);
@@ -257,7 +303,6 @@ class DataProvider with ChangeNotifier {
       _errorMessage =
           'Failed to sync with server. Showing local data: ${e.toString()}';
       print('Error syncing with server, using local data: $e');
-      _isOffline = true;
       // Use local data as fallback
       _serverBundles = await _databaseHelper.getActiveLocalBundles();
     } finally {
@@ -457,7 +502,6 @@ class DataProvider with ChangeNotifier {
 
   static const Map<String, String> _talukaAbbreviations = {
     // Ahilyanagar talukas
-    'Ahmednagar': 'AH',
     'Jamkhed': 'JA',
     'Karjat': 'KA',
     'Kopargaon': 'KO',
@@ -468,9 +512,10 @@ class DataProvider with ChangeNotifier {
     'Rahuri': 'RH',
     'Sangamner': 'SA',
     'Shevgaon': 'SH',
-    'Shirdi': 'SI',
-    'Shrigonda': 'SR',
+    'Shrirampur': 'SR',
+    'Shrigonda': 'SG',
     'Akole': 'AK',
+    'Nagar': 'NA',
 
     // Chhatrapati Sambhajinagar talukas
     'Aurangabad': 'AU',
@@ -482,6 +527,36 @@ class DataProvider with ChangeNotifier {
     'Vaijapur': 'VA',
     'Phulambri': 'PH',
     'Soegaon': 'SO',
+  };
+
+  // Hardcoded fallback mapping for taluka to location slug (used in offline mode)
+  static const Map<String, String> _talukaToLocationMapping = {
+    // Ahilyanagar talukas
+    'Ahmednagar': 'ahilyanagar',
+    'Jamkhed': 'ahilyanagar',
+    'Karjat': 'ahilyanagar',
+    'Kopargaon': 'ahilyanagar',
+    'Nevasa': 'ahilyanagar',
+    'Parner': 'ahilyanagar',
+    'Pathardi': 'ahilyanagar',
+    'Rahata': 'ahilyanagar',
+    'Rahuri': 'ahilyanagar',
+    'Sangamner': 'ahilyanagar',
+    'Shevgaon': 'ahilyanagar',
+    'Shirdi': 'ahilyanagar',
+    'Shrigonda': 'ahilyanagar',
+    'Akole': 'ahilyanagar',
+
+    // Chhatrapati Sambhajinagar talukas
+    'Aurangabad': 'chhatrapati-sambhajinagar',
+    'Gangapur': 'chhatrapati-sambhajinagar',
+    'Kannad': 'chhatrapati-sambhajinagar',
+    'Khultabad': 'chhatrapati-sambhajinagar',
+    'Paithan': 'chhatrapati-sambhajinagar',
+    'Sillod': 'chhatrapati-sambhajinagar',
+    'Vaijapur': 'chhatrapati-sambhajinagar',
+    'Phulambri': 'chhatrapati-sambhajinagar',
+    'Soegaon': 'chhatrapati-sambhajinagar',
   };
 
   Future<void> completeBundleForTaluka(String taluka) async {
@@ -503,6 +578,255 @@ class DataProvider with ChangeNotifier {
     }
   }
 
+// 1. First, let's add a method to get the highest sequence number for a taluka
+  Future<int> _getHighestSequenceNumberForTaluka(String taluka) async {
+    try {
+      // Check both temporary records and permanent records for highest sequence
+      final db = await _databaseHelper.database;
+
+      // Get all records for this taluka from temporary sync table
+      final tempRecords = await db.query(
+        'temporary_sync',
+        where: 'json_extract(data, "\$.Taluka") = ?',
+        whereArgs: [taluka],
+      );
+
+      // Get all records for this taluka from raw_records table
+      final rawRecords = await db.query(
+        'raw_records',
+        where:
+            'json_extract(data, "\$.Taluka") = ? AND json_extract(data, "\$.UniqueId") IS NOT NULL',
+        whereArgs: [taluka],
+      );
+
+      int highestSequence = 0;
+
+      // Process temp records
+      for (final record in tempRecords) {
+        try {
+          final data = json.decode(record['data'] as String);
+          final uniqueId = data['UniqueId']?.toString();
+          if (uniqueId != null && uniqueId.isNotEmpty) {
+            final sequence = _extractSequenceFromUniqueId(uniqueId, taluka);
+            if (sequence > highestSequence) {
+              highestSequence = sequence;
+            }
+          }
+        } catch (e) {
+          print('Error processing temp record: $e');
+        }
+      }
+
+      // Process raw records
+      for (final record in rawRecords) {
+        try {
+          final data = json.decode(record['data'] as String);
+          final uniqueId = data['UniqueId']?.toString();
+          if (uniqueId != null && uniqueId.isNotEmpty) {
+            final sequence = _extractSequenceFromUniqueId(uniqueId, taluka);
+            if (sequence > highestSequence) {
+              highestSequence = sequence;
+            }
+          }
+        } catch (e) {
+          print('Error processing raw record: $e');
+        }
+      }
+
+      print('Highest sequence found for taluka $taluka: $highestSequence');
+      return highestSequence;
+    } catch (e) {
+      print('Error getting highest sequence for taluka $taluka: $e');
+      return 0;
+    }
+  }
+
+// 2. Helper method to extract sequence number from existing UniqueId
+  int _extractSequenceFromUniqueId(String uniqueId, String taluka) {
+    try {
+      // Find location and taluka abbreviations for this taluka
+      String? locationSlug;
+
+      // Try to find from loaded configuration
+      if (_fullLocationData.isNotEmpty) {
+        for (final location in _fullLocationData) {
+          final talukas = List<String>.from(location['talukas'] ?? []);
+          if (talukas.contains(taluka)) {
+            locationSlug = location['slug'];
+            break;
+          }
+        }
+      }
+
+      // Fallback to hardcoded mapping
+      if (locationSlug == null) {
+        locationSlug = _talukaToLocationMapping[taluka];
+      }
+
+      if (locationSlug == null) return 0;
+
+      final locationAbbr = _locationAbbreviations[locationSlug];
+      final talukaAbbr = _talukaAbbreviations[taluka];
+
+      if (locationAbbr == null || talukaAbbr == null) return 0;
+
+      // Expected format: LocationAbbrTalukaAbbrSequenceNumber
+      final prefix = '$locationAbbr$talukaAbbr';
+      if (uniqueId.startsWith(prefix) && uniqueId.length > prefix.length) {
+        final sequenceStr = uniqueId.substring(prefix.length);
+        return int.tryParse(sequenceStr) ?? 0;
+      }
+
+      return 0;
+    } catch (e) {
+      print('Error extracting sequence from UniqueId $uniqueId: $e');
+      return 0;
+    }
+  }
+
+// 3. Updated generateUniqueId method (no longer increments count)
+  Future<String> generateUniqueId(Map<String, dynamic> record) async {
+    try {
+      final talukaName = record['Taluka']?.toString().trim();
+      if (talukaName == null || talukaName.isEmpty) {
+        throw Exception('Taluka name is required for generating unique ID');
+      }
+
+      print('Generating unique ID for taluka: $talukaName');
+
+      // Get taluka abbreviation
+      final talukaAbbr = _talukaAbbreviations[talukaName];
+      if (talukaAbbr == null) {
+        throw Exception('No abbreviation found for taluka: $talukaName');
+      }
+
+      String? locationSlug;
+
+      // Try to find location slug from loaded configuration data first
+      if (_fullLocationData.isNotEmpty) {
+        for (final location in _fullLocationData) {
+          final talukas = List<String>.from(location['talukas'] ?? []);
+          if (talukas.contains(talukaName)) {
+            locationSlug = location['slug'];
+            break;
+          }
+        }
+      }
+
+      // If not found in loaded data, use hardcoded fallback mapping
+      if (locationSlug == null) {
+        locationSlug = _talukaToLocationMapping[talukaName];
+        print(
+            'Using fallback location mapping for taluka: $talukaName -> $locationSlug');
+      }
+
+      if (locationSlug == null) {
+        throw Exception('Location not found for taluka: $talukaName');
+      }
+
+      final locationAbbr = _locationAbbreviations[locationSlug];
+      if (locationAbbr == null) {
+        throw Exception('No abbreviation found for location: $locationSlug');
+      }
+
+      // Get next sequence number based on highest existing sequence
+      final nextSequence = await _getNextSequenceNumber(talukaName);
+
+      final uniqueId = '$locationAbbr$talukaAbbr$nextSequence';
+      print('Generated unique ID: $uniqueId for taluka: $talukaName');
+
+      return uniqueId;
+    } catch (e) {
+      print('Error generating unique ID: $e');
+      rethrow;
+    }
+  }
+
+// 4. Updated _getNextSequenceNumber method (uses highest sequence, doesn't increment count)
+  Future<int> _getNextSequenceNumber(String taluka) async {
+    try {
+      // Get the highest existing sequence number for this taluka
+      final highestSequence = await _getHighestSequenceNumberForTaluka(taluka);
+
+      // If no existing sequences found, calculate based on bundle number and count
+      if (highestSequence == 0) {
+        final db = await _databaseHelper.database;
+        final result = await db.query(
+          'bundles',
+          where: 'taluka = ? AND status = ?',
+          whereArgs: [taluka, 'active'],
+          limit: 1,
+        );
+
+        if (result.isNotEmpty) {
+          final bundle = result.first;
+          final bundleNo = (bundle['bundleNo'] ?? 1) as int;
+          final count = (bundle['count'] ?? 0) as int;
+
+          // Calculate starting sequence for this bundle
+          final baseSequence = (bundleNo - 1) * 250;
+
+          // Return the next sequence after the current count
+          return baseSequence + count + 1;
+        } else {
+          throw Exception('No bundle found for taluka: $taluka');
+        }
+      }
+
+      // Return next sequence after the highest found
+      return highestSequence + 1;
+    } catch (e) {
+      print('Error getting next sequence number for taluka $taluka: $e');
+      rethrow;
+    }
+  }
+
+// 5. Updated saveRecordToSync method with duplicate prevention
+  Future<bool> saveRecordToSync(Map<String, dynamic> record) async {
+    try {
+      // Check if record with same UniqueId already exists in temp table
+      if (record['UniqueId'] != null) {
+        final existingRecords = await _databaseHelper.getRecordsToSync();
+        final isDuplicate = existingRecords.any((existingRecord) =>
+            existingRecord['UniqueId'] == record['UniqueId']);
+
+        if (isDuplicate) {
+          print(
+              'Record with UniqueId ${record['UniqueId']} already exists in temporary storage');
+          return false; // Don't save duplicate
+        }
+      }
+
+      // Check if record with same 'Search from' already exists
+      final searchFrom = record['Search from'];
+      if (searchFrom != null) {
+        final existingRecords = await _databaseHelper.getRecordsToSync();
+        final isDuplicateSearchFrom = existingRecords.any(
+            (existingRecord) => existingRecord['Search from'] == searchFrom);
+
+        if (isDuplicateSearchFrom) {
+          print(
+              'Record with Search from $searchFrom already exists in temporary storage');
+          return false; // Don't save duplicate
+        }
+      }
+
+      final success_temp = await _databaseHelper.saveRecordToSync(record);
+      final success_permanent = await _databaseHelper.updateRecordWithUniqueId(
+          record['Search from'], record['UniqueId'] ?? record['UniqueId']);
+
+      if (success_temp && success_permanent) {
+        notifyListeners();
+      }
+
+      return success_temp && success_permanent;
+    } catch (e) {
+      print('Error saving record to sync: $e');
+      return false;
+    }
+  }
+
+// 6. Updated incrementBundleCount method (only called after successful save)
   Future<void> incrementBundleCount(String taluka) async {
     final db = await _databaseHelper.database;
     final result = await db.query(
@@ -533,7 +857,7 @@ class DataProvider with ChangeNotifier {
       // Immediately refresh local bundles for UI
       await refreshLocalBundles();
 
-      // CRITICAL: Save updated bundles to SharedPreferences immediately
+      // Save updated bundles to SharedPreferences immediately
       await _saveBundlesToPrefs(_serverBundles);
 
       print(
@@ -541,132 +865,6 @@ class DataProvider with ChangeNotifier {
       print('Updated bundles saved to SharedPreferences');
     } else {
       throw Exception('No active bundle found for taluka: $taluka');
-    }
-  }
-
-  // Generate unique ID for a record
-  Future<String> generateUniqueId(Map<String, dynamic> record) async {
-    try {
-      final talukaName = record['Taluka']?.toString().trim();
-      if (talukaName == null || talukaName.isEmpty) {
-        throw Exception('Taluka name is required for generating unique ID');
-      }
-
-      // Get taluka and location abbreviations (existing logic)
-      final talukaAbbr = _talukaAbbreviations[talukaName];
-      if (talukaAbbr == null) {
-        throw Exception('No abbreviation found for taluka: $talukaName');
-      }
-
-      String? locationSlug;
-      for (final location in _fullLocationData) {
-        final talukas = List<String>.from(location['talukas'] ?? []);
-        if (talukas.contains(talukaName)) {
-          locationSlug = location['slug'];
-          break;
-        }
-      }
-
-      if (locationSlug == null) {
-        throw Exception('Location not found for taluka: $talukaName');
-      }
-
-      final locationAbbr = _locationAbbreviations[locationSlug];
-      if (locationAbbr == null) {
-        throw Exception('No abbreviation found for location: $locationSlug');
-      }
-
-      // Get current sequence and increment count immediately
-      final nextSequence = await _getNextSequenceNumber(talukaName);
-
-      final uniqueId = '$locationAbbr$talukaAbbr$nextSequence';
-      print('Generated unique ID: $uniqueId for taluka: $talukaName');
-
-      return uniqueId;
-    } catch (e) {
-      print('Error generating unique ID: $e');
-      rethrow;
-    }
-  }
-
-  // Get next sequence number for a specific taluka
-  Future<int> _getNextSequenceNumber(String taluka) async {
-    final db = await _databaseHelper.database;
-    final result = await db.query(
-      'bundles',
-      where: 'taluka = ?',
-      whereArgs: [taluka],
-      limit: 1,
-    );
-    if (result.isNotEmpty) {
-      final bundle = result.first;
-      final bundleNo = (bundle['bundleNo'] ?? 1) as int;
-      final count = (bundle['count'] ?? 0) as int;
-      // Sequence number logic: (bundleNo - 1) * 250 + count
-      return (bundleNo - 1) * 250 +
-          count +
-          1; // Increment by 1 for next sequence
-    } else {
-      throw Exception('No bundle found for taluka: $taluka');
-    }
-  }
-
-// New method that gets sequence and increments count
-  // Future<int> _getNextSequenceNumberAndIncrement(String taluka) async {
-  //   final db = await _databaseHelper.database;
-  //   final result = await db.query(
-  //     'bundles',
-  //     where: 'taluka = ? AND status = ?',
-  //     whereArgs: [taluka, 'active'],
-  //     limit: 1,
-  //   );
-
-  //   if (result.isNotEmpty) {
-  //     final bundle = result.first;
-  //     final bundleNo = (bundle['bundleNo'] ?? 1) as int;
-  //     final currentCount = (bundle['count'] ?? 0) as int;
-
-  //     print(
-  //         'BEFORE INCREMENT: Bundle $bundleNo, Taluka: $taluka, Count: $currentCount');
-
-  //     // Calculate sequence number
-  //     final sequenceNumber = (bundleNo - 1) * 250 + currentCount + 1;
-
-  //     // Increment count immediately in local database
-  //     final updateResult = await db.update(
-  //       'bundles',
-  //       {'count': currentCount + 1},
-  //       where: 'bundleNo = ? AND taluka = ?',
-  //       whereArgs: [bundleNo, taluka],
-  //     );
-
-  //     print('Local count updated: $updateResult rows affected');
-
-  //     // Immediately refresh local bundles for UI
-  //     await refreshLocalBundles();
-
-  //     print(
-  //         'Incremented local count for taluka: $taluka, new count: ${currentCount + 1}');
-
-  //     return sequenceNumber;
-  //   } else {
-  //     throw Exception('No active bundle found for taluka: $taluka');
-  //   }
-  // }
-
-  // Save record to temporary sync table
-  Future<bool> saveRecordToSync(Map<String, dynamic> record) async {
-    try {
-      final success_temp = await _databaseHelper.saveRecordToSync(record);
-      final success_permanent = await _databaseHelper.updateRecordWithUniqueId(
-          record['Search from'], record['UniqueId'] ?? record['UniqueId']);
-      if (success_temp && success_permanent) {
-        notifyListeners();
-      }
-      return success_temp && success_permanent;
-    } catch (e) {
-      print('Error saving record to sync: $e');
-      return false;
     }
   }
 
@@ -967,7 +1165,6 @@ class DataProvider with ChangeNotifier {
       _serverBundles.clear();
       _records.clear();
       _errorMessage = null;
-      _isOffline = false;
 
       notifyListeners();
       print('Runtime user data cleared successfully.');
@@ -1007,7 +1204,6 @@ class DataProvider with ChangeNotifier {
       _serverBundles.clear();
       _records.clear();
       _errorMessage = null;
-      _isOffline = false;
 
       notifyListeners();
       print('User-specific data cleared successfully.');
