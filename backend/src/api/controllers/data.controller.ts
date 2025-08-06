@@ -319,6 +319,42 @@ export const getFileById = async (
   }
 };
 
+
+
+/**
+ * Controller to add a new taluka to a specific location's config.
+ */
+export const addTaluka = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { locationSlug, talukaName } = req.body;
+
+    // Validate the incoming data
+    if (!locationSlug || !talukaName) {
+      return res.status(400).json({
+        message: 'Bad Request: "locationSlug" and "talukaName" are required.',
+      });
+    }
+
+    const result = await firebaseService.addTalukaToLocation(
+      locationSlug,
+      talukaName
+    );
+
+    return res.status(200).json(result);
+  } catch (error: any) {
+    // Handle specific errors, like if the location doesn't exist
+    if (error.message.includes("not found")) {
+      return res.status(404).json({ message: error.message });
+    }
+    console.error("Error adding new taluka:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+
 /**
  * Controller to get the application configuration (locations, talukas).
  */

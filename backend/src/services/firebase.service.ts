@@ -401,6 +401,79 @@ export async function getConfigFromDB(): Promise<any> {
   return snapshot.val();
 }
 
+
+/**
+ * Adds a new taluka to a location's list in the /config path.
+ * Uses a targeted transaction for maximum reliability.
+ * @param locationSlug - The slug of the location to add the taluka to.
+ * @param talukaName - The name of the new taluka.
+ * @returns A success or informational message.
+ */
+export async function addTalukaToLocation(
+  locationSlug: string,
+  talukaName: string
+): Promise<{ message: string }> {
+  const db = admin.database();
+  const configRef = db.ref("config");
+
+  // 1. Read config first to find the numeric index of the location object.
+  const snapshot = await configRef.once("value");
+  const config = snapshot.val();
+
+  if (!config || !config.talukas || !Array.isArray(config.talukas)) {
+    throw new Error("Configuration data is missing or has an invalid format.");
+  }
+
+  const locationIndex = config.talukas.findIndex(
+    (loc: any) => loc.locationSlug === locationSlug
+  );
+
+  if (locationIndex === -1) {
+    throw new Error(`Location with slug "${locationSlug}" not found in config.`);
+  }
+
+  // 2. Create a direct reference to the specific array we want to modify.
+  // For example: /config/talukas/0/talukas
+  const talukasArrayRef = db.ref(`/config/talukas/${locationIndex}/talukas`);
+
+  // 3. Run a transaction on only the array of talukas.
+  const { committed } = await talukasArrayRef.transaction(
+    (currentTalukaList) => {
+      // currentTalukaList is the array itself (e.g., ['Jamkhed', 'Karjat']) or null.
+      const talukaArray = currentTalukaList || [];
+
+      // If the taluka already exists, abort the transaction by returning undefined.
+      if (talukaArray.includes(talukaName)) {
+        return; // Abort
+      }
+
+      // Add the new taluka and return the modified array.
+      talukaArray.push(talukaName);
+      return talukaArray;
+    }
+  );
+
+  if (committed) {
+    return {
+      message: `Successfully added taluka "${talukaName}" to "${locationSlug}".`,
+    };
+  } else {
+    // If the transaction was aborted, it's almost certainly because the taluka
+    // already existed. We provide a helpful message for this case.
+    // For any other conflict, we'll provide the generic error.
+    const checkSnapshot = await talukasArrayRef.once("value");
+    if (checkSnapshot.val()?.includes(talukaName)) {
+      return {
+        message: `Taluka "${talukaName}" already exists in "${locationSlug}". No changes made.`,
+      };
+    }
+
+    throw new Error(
+      "Failed to add taluka. The request may have conflicted with another operation. Please try again."
+    );
+  }
+}
+
 /**
  * Fetches active bundles and enriches them with the total record count for that bundle.
  * @param userId - The UID of the user.

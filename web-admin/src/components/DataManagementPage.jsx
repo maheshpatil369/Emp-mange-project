@@ -176,34 +176,32 @@ export const LocationFileManagement = () => {
         </div>
       </div> */}
 
-
       <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
-  <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b-2 border-green-400 inline-block pb-1">
-    Upload Files
-  </h2>
+        <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b-2 border-green-400 inline-block pb-1">
+          Upload Files
+        </h2>
 
-  <div className="flex items-center space-x-4">
-    <input
-      type="file"
-      onChange={(e) => setSelectedFile(e.target.files[0])}
-      className="flex-1 text-sm text-gray-600 border border-gray-300 rounded-lg p-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200 transition"
-    />
+        <div className="flex items-center space-x-4">
+          <input
+            type="file"
+            onChange={(e) => setSelectedFile(e.target.files[0])}
+            className="flex-1 text-sm text-gray-600 border border-gray-300 rounded-lg p-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200 transition"
+          />
 
-    <button
-      onClick={handleUpload}
-      disabled={!selectedFile || uploading}
-      className="flex items-center justify-center px-5 py-2 font-semibold text-white bg-green-600 rounded-lg shadow-md hover:bg-green-500 active:scale-95 disabled:bg-green-300 transition-all duration-200"
-    >
-      {uploading ? (
-        <Loader2 className="w-5 h-5 animate-spin" />
-      ) : (
-        <UploadCloud className="w-5 h-5 mr-2" />
-      )}
-      {uploading ? "Uploading..." : "Upload"}
-    </button>
-  </div>
-</div>
-
+          <button
+            onClick={handleUpload}
+            disabled={!selectedFile || uploading}
+            className="flex items-center justify-center px-5 py-2 font-semibold text-white bg-green-600 rounded-lg shadow-md hover:bg-green-500 active:scale-95 disabled:bg-green-300 transition-all duration-200"
+          >
+            {uploading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <UploadCloud className="w-5 h-5 mr-2" />
+            )}
+            {uploading ? "Uploading..." : "Upload"}
+          </button>
+        </div>
+      </div>
 
       {/* Uploaded Files Section */}
       <div className="bg-white p-6 rounded-lg shadow-md">
@@ -250,12 +248,11 @@ export const LocationFileManagement = () => {
                       Delete
                     </button> */}
                     <button
-                 onClick={() => handleDelete(file.id)}
-                 className="px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-md shadow hover:bg-red-700 active:scale-95 transition-all duration-200"
-                   >
-                    Delete
-                  </button>
-
+                      onClick={() => handleDelete(file.id)}
+                      className="px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-md shadow hover:bg-red-700 active:scale-95 transition-all duration-200"
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -296,20 +293,19 @@ const LocationsSection = ({ locations, loading }) => (
           //   </Link>
           // </div>
           <div
-  key={loc.slug}
-  className="p-4 border-2 border-gray-300 rounded-lg flex items-center justify-between shadow-sm hover:shadow-md transition"
->
-  <span className="font-medium">{loc.name}</span>
+            key={loc.slug}
+            className="p-4 border-2 border-gray-300 rounded-lg flex items-center justify-between shadow-sm hover:shadow-md transition"
+          >
+            <span className="font-medium">{loc.name}</span>
 
-  <Link
-    to={`/data-management/${loc.slug}`}
-    className="ml-2 flex items-center gap-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md shadow-md hover:bg-green-500 active:scale-95 transition-all duration-200"
-  >
-    Manage Data
-    <ChevronRight className="w-4 h-4" />
-  </Link>
-</div>
-
+            <Link
+              to={`/data-management/${loc.slug}`}
+              className="ml-2 flex items-center gap-1 px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md shadow-md hover:bg-green-500 active:scale-95 transition-all duration-200"
+            >
+              Manage Data
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
         ))}
       </div>
     )}
@@ -562,8 +558,15 @@ const AdminTools = ({ users, config }) => {
     <div className="bg-white p-6 rounded-lg shadow-md space-y-8">
       <h2 className="text-xl font-semibold text-gray-700">Management Tools</h2>
       <AdminTool
-        title="Mark Incomplete Bundle as Complete"
-        description="Manually complete a user's current bundle for a specific Taluka, allowing them to assign a new one. This does not delete any processed data."
+        title="Add New Taluka"
+        description="Add a new Taluka to an existing Location's configuration. This will make it available for bundle assignment."
+      >
+        <AddTalukaForm config={config} />
+      </AdminTool>
+      <hr />
+      <AdminTool
+        title="Delete Existing Bundle"
+        description="Manually remove a user's current bundle for a specific Taluka. This allows them to be assigned a new bundle. Note: This does not delete any processed data."
       >
         <MarkIncompleteForm users={users} config={config} />
       </AdminTool>
@@ -600,6 +603,82 @@ const AdminTool = ({ title, description, children }) => (
     <div className="mt-4">{children}</div>
   </div>
 );
+
+const AddTalukaForm = ({ config }) => {
+  const [formData, setFormData] = useState({
+    locationSlug: "",
+    talukaName: "",
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) =>
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (
+      !window.confirm(
+        `Are you sure you want to add "${formData.talukaName}" to the location?`
+      )
+    ) {
+      return;
+    }
+    setLoading(true);
+    try {
+      // The API endpoint we created earlier
+      const response = await apiClient.post("/data/config/talukas", formData);
+      toast.success(response.data.message || "Taluka added successfully!");
+      // Reset the form on success
+      setFormData({ locationSlug: "", talukaName: "" });
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Operation failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!config) {
+    return (
+      <div className="flex items-center text-sm text-gray-400">
+        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+        <span>Loading configuration...</span>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end"
+    >
+      <SelectInput
+        name="locationSlug"
+        value={formData.locationSlug}
+        onChange={handleChange}
+        options={config.locations.map((loc) => ({
+          value: loc.slug,
+          label: loc.name,
+        }))}
+        placeholder="Select Location"
+      />
+      <TextInput
+        name="talukaName"
+        value={formData.talukaName}
+        onChange={handleChange}
+        placeholder="New Taluka Name"
+        disabled={!formData.locationSlug}
+      />
+      <button
+        type="submit"
+        disabled={loading || !formData.locationSlug || !formData.talukaName}
+        className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-blue-300"
+      >
+        <DatabaseZap className="w-5 h-5 mr-2" />
+        {loading ? <Loader2 className="animate-spin" /> : "Add Taluka"}
+      </button>
+    </form>
+  );
+};
 
 const MarkIncompleteForm = ({ users, config }) => {
   const [formData, setFormData] = useState({ userId: "", taluka: "" });

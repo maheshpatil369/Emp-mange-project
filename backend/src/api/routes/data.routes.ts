@@ -3,6 +3,7 @@
 import { Router } from "express";
 import multer from "multer";
 import {
+  addTaluka,
   assignBundle,
   completeBundle,
   deleteFile,
@@ -27,6 +28,8 @@ const router = Router();
 
 // This endpoint is public so the app can fetch it before login if needed.
 router.get('/config', getConfig);
+// Adds a new taluka to a specific location in the config.
+router.post('/config/talukas', isAuthenticated, isAdmin, addTaluka);
 
 
 // GET /api/data/bundles/active (Any authenticated user)
