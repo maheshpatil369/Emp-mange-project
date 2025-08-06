@@ -250,7 +250,7 @@ const UserLeaderboard = ({ data = [] }) => {
           User Leaderboard
         </h2>
         <button
-          className="text-sm text-blue-500 hover:underline flex items-center"
+          className="flex items-center gap-1.5 px-2.5 py-1 border border-gray-300 rounded bg-white hover:bg-gray-100 shadow-sm text-gray-700 text-sm font-medium transition"
           onClick={(e) => {
             e.stopPropagation();
             setIsOpen(!isOpen);
@@ -258,12 +258,12 @@ const UserLeaderboard = ({ data = [] }) => {
         >
           {isOpen ? (
             <>
-              <ChevronDown size={16} className="mr-1" />
+              <ChevronDown size={14} className="text-gray-700" />
               Collapse
             </>
           ) : (
             <>
-              <ChevronRight size={16} className="mr-1" />
+              <ChevronRight size={14} className="text-gray-700" />
               Expand
             </>
           )}
@@ -381,7 +381,7 @@ const BundleCompletionSummary = ({ data = [], config = {} }) => {
           Bundle Completion Summary
         </h2>
         <button
-          className="text-sm text-blue-500 hover:underline flex items-center"
+          className="flex items-center gap-1.5 px-2.5 py-1 border border-gray-300 rounded bg-white hover:bg-gray-100 shadow-sm text-gray-700 text-sm font-medium transition"
           onClick={(e) => {
             e.stopPropagation(); // Prevent double toggle
             setIsOpen(!isOpen);
@@ -389,12 +389,12 @@ const BundleCompletionSummary = ({ data = [], config = {} }) => {
         >
           {isOpen ? (
             <>
-              <ChevronDown size={16} className="mr-1" />
+              <ChevronDown size={14} className="text-gray-700" />
               Collapse
             </>
           ) : (
             <>
-              <ChevronRight size={16} className="mr-1" />
+              <ChevronRight size={14} className="text-gray-700" />
               Expand
             </>
           )}
