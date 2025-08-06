@@ -1,5 +1,6 @@
 import admin from "firebase-admin";
 import { User, ActiveBundle, BundleCounter, ProcessedRecord } from "../types";
+import logger from "../config/logger"; // Import the new logger
 
 /**
  * Fetches all user profiles from the '/users' path in the Realtime Database.
@@ -163,58 +164,72 @@ export async function assignNewBundleToUser(
   location: string,
   taluka: string
 ): Promise<ActiveBundle> {
-  const db = admin.database();
-  const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
-  const bundleCounterRef = db.ref(`bundleCounters/${location}/${taluka}`);
+  try {
+    const db = admin.database();
+    const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
+    const bundleCounterRef = db.ref(`bundleCounters/${location}/${taluka}`);
 
-  // First, check if the user already has an active bundle for this taluka.
-  const existingStateSnapshot = await userStateRef.once("value");
-  if (existingStateSnapshot.exists()) {
-    throw new Error(`User already has an active bundle for ${taluka}.`);
-  }
+    logger.info(`Attempting to assign bundle for user ${userId} in ${location}/${taluka}`);
 
-  let assignedBundleNo: number;
-
-  // Run a single, atomic transaction to safely get the next bundle number.
-  const { committed } = await bundleCounterRef.transaction(
-    (currentData: BundleCounter | null) => {
-      // If the counter doesn't exist for this taluka, initialize it.
-      if (currentData === null) {
-        assignedBundleNo = 1; // Assign the very first bundle
-        return { nextBundle: 2 }; // The next one to be assigned will be 2
-      }
-
-      // Check if there are recycled bundle numbers in the 'gaps' array.
-      if (currentData.gaps && currentData.gaps.length > 0) {
-        currentData.gaps.sort((a, b) => a - b); // Ensure we take the smallest
-        assignedBundleNo = currentData.gaps.shift()!; // Take the first number from gaps
-      } else {
-        // Otherwise, use the nextBundle number.
-        assignedBundleNo = currentData.nextBundle || 1;
-        currentData.nextBundle = assignedBundleNo + 1;
-      }
-
-      return currentData; // Return the modified data to be saved by the transaction.
+    // First, check if the user already has an active bundle for this taluka.
+    const existingStateSnapshot = await userStateRef.once("value");
+    if (existingStateSnapshot.exists()) {
+      logger.warn(`User ${userId} already has an active bundle for ${taluka}`);
+      throw new Error(`User already has an active bundle for ${taluka}.`);
     }
-  );
 
-  if (!committed) {
-    throw new Error(
-      "Failed to commit transaction to assign bundle number. Please try again."
+    let assignedBundleNo: number;
+
+    // Run a single, atomic transaction to safely get the next bundle number.
+    const { committed, snapshot } = await bundleCounterRef.transaction(
+      (currentData: BundleCounter | null) => {
+        // If the counter doesn't exist for this taluka, initialize it.
+        if (currentData === null) {
+          logger.info(`Initializing bundle counter for ${location}/${taluka}`);
+          assignedBundleNo = 1; // Assign the very first bundle
+          return { nextBundle: 2 }; // The next one to be assigned will be 2
+        }
+
+        // Check if there are recycled bundle numbers in the 'gaps' array.
+        if (currentData.gaps && currentData.gaps.length > 0) {
+          currentData.gaps.sort((a, b) => a - b); // Ensure we take the smallest
+          assignedBundleNo = currentData.gaps.shift()!; // Take the first number from gaps
+          logger.debug(`Reusing bundle number from gaps: ${assignedBundleNo}`);
+        } else {
+          // Otherwise, use the nextBundle number.
+          assignedBundleNo = currentData.nextBundle || 1;
+          currentData.nextBundle = assignedBundleNo + 1;
+          logger.debug(`Assigning next sequential bundle number: ${assignedBundleNo}`);
+        }
+
+        return currentData; // Return the modified data to be saved by the transaction.
+      }
     );
+
+    if (!committed) {
+      logger.error(`Failed to commit transaction for user ${userId} in ${location}/${taluka}`);
+      throw new Error(
+        "Failed to commit transaction to assign bundle number. Please try again."
+      );
+    }
+
+    // Now that the transaction is complete and we have the assigned number,
+    // create the new bundle state for the user.
+    const newBundle: ActiveBundle = {
+      bundleNo: assignedBundleNo!,
+      count: 0,
+      taluka: taluka,
+    };
+
+    logger.info(`Creating new bundle for user ${userId}: ${JSON.stringify(newBundle)}`);
+    await userStateRef.set(newBundle);
+
+    logger.info(`Successfully assigned bundle #${newBundle.bundleNo} to user ${userId} in ${taluka}`);
+    return newBundle;
+  } catch (error) {
+    logger.error(`Complete error in assignNewBundleToUser for user ${userId} in ${location}/${taluka}:`, error);
+    throw error; // Re-throw to allow caller to handle
   }
-
-  // Now that the transaction is complete and we have the assigned number,
-  // create the new bundle state for the user.
-  const newBundle: ActiveBundle = {
-    bundleNo: assignedBundleNo!,
-    count: 0,
-    taluka: taluka,
-  };
-
-  await userStateRef.set(newBundle);
-
-  return newBundle;
 }
 
 /**
@@ -720,7 +735,7 @@ export async function getAnalyticsDataFromDB(filters: {
 
             // Robust matching: find key that includes "pdf required" case-insensitive
             const pdfKey = Object.keys(record).find(
-              (k) => k.trim().toLowerCase() === "pdf required"
+              (k) => k.trim().toLowerCase() === "PDf required"
             );
 
             if (pdfKey) {
@@ -800,7 +815,7 @@ export async function getAnalyticsDataFromDB(filters: {
             const record = processedBundleRecords[recordId];
             if (record && typeof record === "object") {
               const pdfKey = Object.keys(record).find(
-                (k) => k.trim().toLowerCase() === "pdf required"
+                (k) => k.trim().toLowerCase() === "PDf Required"
               );
               if (pdfKey && record[pdfKey].toLowerCase() === "yes") {
                 pdfsRequiredInBundle++;

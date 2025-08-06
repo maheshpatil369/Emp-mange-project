@@ -1,9 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'home/home_screen.dart';
 import 'data_management/data_screen.dart';
 import 'profile/profile_screen.dart';
-import '../widgets/comman/custom_drawer.dart';
+// import '../widgets/comman/custom_drawer.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -34,13 +33,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         title: Text(
           ['Dashboard', 'Data Management', 'Profile'][_selectedIndex],
         ),
-        backgroundColor: Color(0xFF22B14C), // ✅ Green header
+        backgroundColor: const Color(0xFF22B14C), // ✅ Green header
         elevation: 1,
         foregroundColor: Colors.white, // ✅ White text/icon
       ),
-      drawer: const CustomDrawer(),
+      // drawer: const CustomDrawer(),
 
-      backgroundColor: Color(0xFFF2F2F2), // ✅ Light grey background
+      backgroundColor: const Color(0xFFF2F2F2), // ✅ Light grey background
 
       body: Center(
         child: _widgetOptions.elementAt(_selectedIndex),
@@ -62,9 +61,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
         ],
         currentIndex: _selectedIndex,
-        selectedItemColor: Colors.white,       // ✅ Active icon color
-        unselectedItemColor: Colors.white70,   // ✅ Inactive icon color
-        backgroundColor: Color(0xFF22B14C),    // ✅ Green footer
+        selectedItemColor: Colors.white, // ✅ Active icon color
+        unselectedItemColor: Colors.white70, // ✅ Inactive icon color
+        backgroundColor: const Color(0xFF22B14C), // ✅ Green footer
         onTap: _onItemTapped,
       ),
     );

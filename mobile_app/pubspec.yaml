@@ -25,7 +25,7 @@ dependencies:
   path_provider: ^2.1.2
   path: ^1.9.0
 
-  # SQLite FFI for Web/Desktop compatibility
+  # SQLite FFI for Web/Desktop/Mobile compatibility
   sqflite_common_ffi_web: ^0.4.2
   sqflite_common_ffi: ^2.3.3+1
 
@@ -35,11 +35,22 @@ dependencies:
   # Firebase Packages
   firebase_core: ^2.27.0
   firebase_auth: ^4.17.0
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^2.0.0
+  flutter_launcher_icons: ^0.13.1   
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/app_logo.png   
+    - .env.development
+    - .env.example
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/app_logo.png"   

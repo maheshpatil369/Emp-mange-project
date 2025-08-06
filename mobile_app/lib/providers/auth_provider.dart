@@ -6,7 +6,7 @@ import '../models/user_model.dart'; // User model ko import karein
 
 class AuthProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
-  
+
   User? _user;
   bool _isLoading = false;
   String? _errorMessage;
@@ -14,11 +14,13 @@ class AuthProvider with ChangeNotifier {
   User? get user => _user;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  Future<void> checkLoginStatus() async => _checkLoginStatus();
 
-  bool get isAuthenticated => _user != null; 
+  bool get isAuthenticated => _user != null;
 
   AuthProvider() {
-    print('AuthProvider initialized. Checking login status...'); // Debugging print
+    print(
+        'AuthProvider initialized. Checking login status...'); // Debugging print
     _checkLoginStatus();
   }
 
@@ -27,51 +29,74 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      print("09876554312");
       final prefs = await SharedPreferences.getInstance();
-      print("09876554312 BCED");
       final token = prefs.getString('token');
-      print('Checking token: $token'); // Debugging print
-
-      if (token != null && token.isNotEmpty) {
-        // In a real app, you'd validate this token with your backend
-        // and fetch actual user details. For now, assume valid.
-        _user = User(email: 'user@example.com', name: 'Logged In User'); 
-        print('User found from token: ${_user?.email}'); // Debugging print
+      if (token == null) {
+        print('No token found in SharedPreferences. User is not logged in.');
+        _user = null;
+        notifyListeners();
+        return;
+      }
+      final name = prefs.getString('name');
+      final email = prefs.getString('email');
+      if (token != null && name != null && email != null) {
+        _user = User(name: name, email: email); // Adjust User model as needed
+        notifyListeners();
+      } else if (token != null) {
+        _user = null;
+        print('No user information found, token exists.');
       } else {
         _user = null;
-        print('No token found, user is logged out.'); // Debugging print
+        print('User is not logged in.');
       }
     } catch (e) {
       _errorMessage = 'Failed to check login status: ${e.toString()}';
       _user = null;
-      print('Error checking login status: $_errorMessage'); // Debugging print
+      print('Error checking login status: $_errorMessage');
     } finally {
       _isLoading = false;
       notifyListeners();
-      print('Login status check complete. isAuthenticated: $isAuthenticated'); // Debugging print
+      print(
+          'Login status check complete. isAuthenticated: $isAuthenticated'); // Debugging print
     }
   }
 
   Future<void> signInWithEmailAndPassword(String email, String password) async {
     _isLoading = true;
     _errorMessage = null;
+    _user = null;
     notifyListeners();
     print('Attempting login for: $email'); // Debugging print
 
     try {
-      await _apiService.login(email, password); 
-      _user = User(email: email, name: email.split('@')[0]);
-      _errorMessage = null;
+      print('Calling login API with email: $email'); // Debugging print
+      final token = await _apiService.login(email + "@yourapp.com", password);
+      print("Login API returned token: $token"); // Debugging print
+
+      // Verify token is not empty
+      if (token.isEmpty) {
+        _errorMessage = 'Invalid login response';
+        _user = null;
+        print('Login failed: Invalid token'); // Debugging print
+        return;
+      }
+
+      // // Save token to SharedPreferences
+      // final prefs = await SharedPreferences.getInstance();
+      // await prefs.setString('token', token);
+      // Set user details
+      _user = User(email: email + "@yourapp.com", name: email);
+      _errorMessage = "Login successful";
       print('Login successful for: $email'); // Debugging print
     } catch (e) {
-      _errorMessage = 'Login failed: ${e.toString()}';
+      _errorMessage = '${e.toString()}';
       _user = null;
       print('Login failed: $_errorMessage'); // Debugging print
     } finally {
       _isLoading = false;
       notifyListeners();
-      print('Login attempt finished. isAuthenticated: $isAuthenticated'); // Debugging print
+      print(
+          'Login attempt finished. isAuthenticated: $isAuthenticated'); // Debugging print
     }
   }
 
@@ -81,7 +106,7 @@ class AuthProvider with ChangeNotifier {
     print('Attempting logout...'); // Debugging print
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('token');
+      await prefs.clear(); // Clear all preferences
       _user = null;
       _errorMessage = null;
       print('Logout successful.'); // Debugging print
@@ -91,7 +116,8 @@ class AuthProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
-      print('Logout attempt finished. isAuthenticated: $isAuthenticated'); // Debugging print
+      print(
+          'Logout attempt finished. isAuthenticated: $isAuthenticated'); // Debugging print
     }
   }
 }

@@ -14,7 +14,7 @@ const router = Router();
 // GET /api/users
 // Gets a list of all users.
 router.get("/", isAuthenticated, isAdmin, getAllUsers);
-router.get("/me", isAuthenticated, isAdmin, getMe);
+router.get("/me", isAuthenticated, getMe);
 
 // POST /api/users
 // Creates a new user.
