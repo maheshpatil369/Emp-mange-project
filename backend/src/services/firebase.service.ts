@@ -706,9 +706,6 @@ export async function forceCompleteBundleInDB(
   const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}`;
   updates[`${recordPath}/isForceCompleted`] = true;
   updates[`${recordPath}/forceCompletedBy`] = "admin";
-
-  // This is the crucial update:
-  // Save the ID of the user who was assigned this bundle.
   updates[`${recordPath}/assignedTo`] = userId;
 
   const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
@@ -716,7 +713,10 @@ export async function forceCompleteBundleInDB(
 
   if (activeBundleSnapshot.exists()) {
     const activeBundle: ActiveBundle = activeBundleSnapshot.val();
-    if (activeBundle.bundleNo === bundleNo) {
+    
+    // --- THIS IS THE FIX ---
+    // Convert both values to numbers to prevent type mismatch errors (e.g., 1 === "1").
+    if (Number(activeBundle.bundleNo) === Number(bundleNo)) {
       updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
     }
   }
