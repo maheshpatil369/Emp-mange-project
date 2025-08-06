@@ -884,90 +884,187 @@ class _DataScreenState extends State<DataScreen> {
   //   );
   // }
 
-  Widget _buildRecordDetails() {
-    final record = _selectedRecord!;
-    final fields = [
-      {'label': 'Farmer Name', 'key': 'Farmer Name'},
-      {'label': 'Crop Name', 'key': 'Crop Name'},
-      {'label': 'Intimation No', 'key': 'Intimation No'},
-      {'label': 'Correction Details', 'key': 'Correction Details'},
-      {'label': 'UniqueId', 'key': 'UniqueId'},
-      {'label': 'PDf Required', 'key': 'PDf Required'},
-      {'label': 'Search from', 'key': 'Search from'},
-      {'label': 'Taluka', 'key': 'Taluka'},
-    ];
+  // Widget _buildRecordDetails() {
+  //   final record = _selectedRecord!;
+  //   final fields = [
+  //     {'label': 'Farmer Name', 'key': 'Farmer Name'},
+  //     {'label': 'Crop Name', 'key': 'Crop Name'},
+  //     {'label': 'Intimation No', 'key': 'Intimation No'},
+  //     {'label': 'Correction Details', 'key': 'Correction Details'},
+  //     {'label': 'UniqueId', 'key': 'UniqueId'},
+  //     {'label': 'PDf Required', 'key': 'PDf Required'},
+  //     {'label': 'Search from', 'key': 'Search from'},
+  //     {'label': 'Taluka', 'key': 'Taluka'},
+  //   ];
 
-    return Column(
-      children: fields.map((field) {
-        final isPdfRequired = field['key'] == 'PDf Required';
-        final isSearchFrom = field['key'] == 'Search from';
-        final isUniqueId = field['key'] == 'UniqueId';
-        String value = record[field['key']]?.toString() ?? '';
-        if (isPdfRequired) {
-          if (value.toLowerCase() == 'yes') {
-            value = 'Yes';
-          } else {
-            value = 'No';
-          }
+  //   return Column(
+  //     children: fields.map((field) {
+  //       final isPdfRequired = field['key'] == 'PDf Required';
+  //       final isSearchFrom = field['key'] == 'Search from';
+  //       final isUniqueId = field['key'] == 'UniqueId';
+  //       String value = record[field['key']]?.toString() ?? '';
+  //       if (isPdfRequired) {
+  //         if (value.toLowerCase() == 'yes') {
+  //           value = 'Yes';
+  //         } else {
+  //           value = 'No';
+  //         }
+  //       }
+
+  //       return Container(
+  //         margin: const EdgeInsets.only(bottom: 8),
+  //         padding: const EdgeInsets.all(12),
+  //         decoration: BoxDecoration(
+  //           color: isSearchFrom
+  //               ? Colors.green[50]
+  //               : isPdfRequired
+  //                   ? Colors.lightGreen[50]
+  //                   : isUniqueId
+  //                       ? Colors.blue[50]
+  //                       : Colors.grey[50],
+  //           borderRadius: BorderRadius.circular(6),
+  //           border: Border.all(
+  //             color: isSearchFrom
+  //                 ? Colors.green[200]!
+  //                 : isPdfRequired
+  //                     ? Colors.lightGreen[200]!
+  //                     : isUniqueId
+  //                         ? Colors.blue[200]!
+  //                         : Colors.grey[200]!,
+  //           ),
+  //         ),
+  //         child: Row(
+  //           crossAxisAlignment: CrossAxisAlignment.start,
+  //           children: [
+  //             SizedBox(
+  //               width: 120,
+  //               child: Text(
+  //                 '${field['label']}:',
+  //                 style: const TextStyle(
+  //                   fontWeight: FontWeight.w600,
+  //                   fontSize: 12,
+  //                 ),
+  //               ),
+  //             ),
+  //             Expanded(
+  //               child: Text(
+  //                 value,
+  //                 style: TextStyle(
+  //                   // fontSize: 12,
+  //                   fontSize: isUniqueId ? 16 : 12,
+  //                   fontWeight: isUniqueId ? FontWeight.bold : FontWeight.w600,
+  //                   color: isPdfRequired
+  //                       ? (value == 'Yes' ? Colors.red : Colors.black87)
+  //                       : isSearchFrom
+  //                           ? Colors.green[700]
+  //                           : isUniqueId
+  //                               ? Colors.blue[700]
+  //                               : Colors.black87,
+  //                 ),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       );
+  //     }).toList(),
+  //   );
+  // }
+
+Widget _buildRecordDetails() {
+  final record = _selectedRecord!;
+  final fields = [
+    {'label': 'Farmer Name', 'key': 'Farmer Name'},
+    {'label': 'Crop Name', 'key': 'Crop Name'},
+    {'label': 'Intimation No', 'key': 'Intimation No'},
+    {'label': 'Correction Details', 'key': 'Correction Details'},
+    {'label': 'UniqueId', 'key': 'UniqueId'},
+    {'label': 'PDf Required', 'key': 'PDf Required'},
+    {'label': 'Search from', 'key': 'Search from'},
+    {'label': 'Taluka', 'key': 'Taluka'},
+  ];
+
+  return Column(
+    children: fields.map((field) {
+      final isPdfRequired = field['key'] == 'PDf Required';
+      final isSearchFrom = field['key'] == 'Search from';
+      final isUniqueId = field['key'] == 'UniqueId';
+      String value = record[field['key']]?.toString() ?? '';
+      if (isPdfRequired) {
+        if (value.toLowerCase() == 'yes') {
+          value = 'Yes';
+        } else {
+          value = 'No';
         }
+      }
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isSearchFrom
-                ? Colors.green[50]
-                : isPdfRequired
-                    ? Colors.lightGreen[50]
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          // ✅ Background color updated for PDf Required == Yes
+          color: isPdfRequired
+              ? (value.toLowerCase() == 'yes'
+                  ? Colors.red
+                  : Colors.lightGreen[50])
+              : isSearchFrom
+                  ? Colors.green[50]
+                  : isUniqueId
+                      ? Colors.blue[50]
+                      : Colors.grey[50],
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            // ✅ Border color updated for PDf Required == Yes
+            color: isPdfRequired
+                ? (value.toLowerCase() == 'yes'
+                    ? Colors.red.shade700
+                    : Colors.lightGreen[200]!)
+                : isSearchFrom
+                    ? Colors.green[200]!
                     : isUniqueId
-                        ? Colors.blue[50]
-                        : Colors.grey[50],
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: isSearchFrom
-                  ? Colors.green[200]!
-                  : isPdfRequired
-                      ? Colors.lightGreen[200]!
-                      : isUniqueId
-                          ? Colors.blue[200]!
-                          : Colors.grey[200]!,
+                        ? Colors.blue[200]!
+                        : Colors.grey[200]!,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 120,
+              child: Text(
+                '${field['label']}:',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
             ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 120,
-                child: Text(
-                  '${field['label']}:',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                  ),
+            Expanded(
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: isUniqueId ? 16 : 12,
+                  fontWeight: isUniqueId ? FontWeight.bold : FontWeight.w600,
+                  // ✅ Text color updated for PDf Required == Yes
+                  color: isPdfRequired && value.toLowerCase() == 'yes'
+                      ? Colors.white
+                      : isPdfRequired
+                          ? Colors.black87
+                          : isSearchFrom
+                              ? Colors.green[700]
+                              : isUniqueId
+                                  ? Colors.blue[700]
+                                  : Colors.black87,
                 ),
               ),
-              Expanded(
-                child: Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: isUniqueId ? FontWeight.bold : FontWeight.w600,
-                    color: isPdfRequired
-                        ? (value == 'Yes' ? Colors.red : Colors.black87)
-                        : isSearchFrom
-                            ? Colors.green[700]
-                            : isUniqueId
-                                ? Colors.blue[700]
-                                : Colors.black87,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
+            ),
+          ],
+        ),
+      );
+    }).toList(),
+  );
+}
+
+
 
   Widget _buildActionButtons() {
     return Row(
