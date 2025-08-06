@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {
-  exportProcessedData,
+  exportCombinedData,
   forceCompleteBundle,
   getAnalyticsPageData,
   getBundleCountersStatus,
@@ -29,12 +29,7 @@ router.get(
 );
 
 // GET /api/admin/export/processed/:location
-router.get(
-  "/export/processed/:location",
-  isAuthenticated,
-  isAdmin,
-  exportProcessedData
-);
+router.get('/export/processed/:location', isAuthenticated, isAdmin, exportCombinedData);
 
 // POST /api/admin/reset-progress
 router.post("/reset-progress", isAuthenticated, isAdmin, resetUserProgress);

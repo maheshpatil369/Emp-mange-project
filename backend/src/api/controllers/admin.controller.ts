@@ -143,7 +143,11 @@ export const manualAssignBundle = async (
  * Controller to export all processed records for a location as an Excel file.
  * This is an admin-only operation.
  */
-export const exportProcessedData = async (
+/**
+ * Controller to export a single combined Excel file containing two sheets:
+ * one for unique records and one for duplicates, based on the 'Intimation No' key.
+ */
+export const exportCombinedData = async (
   req: Request,
   res: Response
 ): Promise<void> => {
@@ -156,7 +160,10 @@ export const exportProcessedData = async (
       return;
     }
 
-    // Fetch all necessary data in parallel.
+    // The key for finding duplicates is now hardcoded as per your requirement.
+    const comparisonKey = "Intimation No";
+
+    // 1. Fetch all necessary data in parallel.
     const [records, users] = await Promise.all([
       firebaseService.getProcessedRecordsByLocationFromDB(location),
       firebaseService.getAllUsersFromDB(),
@@ -171,14 +178,21 @@ export const exportProcessedData = async (
       return;
     }
 
-    // Generate the Excel file buffer using the export service.
-    const fileBuffer = await exportService.generateProcessedRecordsExcel(
+    // 2. Separate the records into unique and duplicate lists.
+    const { uniqueRecords, duplicateRecords } = exportService.separateRecords(
       records,
+      comparisonKey
+    );
+
+    // 3. Generate a single Excel file buffer with two sheets.
+    const fileBuffer = await exportService.generateCombinedExportExcel(
+      uniqueRecords,
+      duplicateRecords,
       users
     );
 
-    // Set the response headers to trigger a file download.
-    const fileName = `${location}-processed-records-${new Date()
+    // 4. Set the response headers to trigger a file download.
+    const fileName = `${location}-combined-export-${new Date()
       .toISOString()
       .slice(0, 10)}.xlsx`;
     res.setHeader(
@@ -187,10 +201,11 @@ export const exportProcessedData = async (
     );
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
 
-    // Send the file buffer as the response.
+    // 5. Send the single file buffer as the response.
     res.send(fileBuffer);
+
   } catch (error: any) {
-    console.error("Error exporting processed data:", error);
+    console.error("Error exporting combined data:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
