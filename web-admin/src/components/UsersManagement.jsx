@@ -2,7 +2,15 @@
 // File: src/components/UsersManagement.jsx
 
 import React, { useState, useEffect } from "react";
-import { PlusCircle, Loader2, AlertTriangle, Edit, Trash2 } from "lucide-react";
+import {
+  PlusCircle,
+  Loader2,
+  AlertTriangle,
+  Edit,
+  Trash2,
+  Download,
+  // DownloadOff
+} from "lucide-react";
 import apiClient from "../lib/axios";
 import toast from "react-hot-toast";
 
@@ -10,31 +18,59 @@ const UsersManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
+  const [fetchedsucess, setFetchedSucess] = useState(true);
   // State for modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState(null); // Will hold the user object to edit
-  const [deletingUser, setDeletingUser] = useState(null); // Will hold the user object to delete
+  const [editingUser, setEditingUser] = useState(null);
+  const [deletingUser, setDeletingUser] = useState(null);
 
   // Function to fetch users
   const fetchUsers = async () => {
     try {
-      setLoading(true);
-      setError(""); // Clear previous errors
+      // Don't set loading to true here on refetch, to avoid screen flicker
+      setError("");
       const response = await apiClient.get("/users");
-      setUsers(response.data);
+
+      const usersWithDefaults = response.data.map((user) => ({
+        ...user,
+        canDownloadFiles:
+          user.canDownloadFiles !== undefined ? user.canDownloadFiles : true,
+      }));
+      setUsers(usersWithDefaults);
     } catch (err) {
       setError("Failed to fetch users.");
       console.error(err);
     } finally {
-      setLoading(false);
+      // Only set loading to false on the initial load
+      if (loading) setLoading(false);
     }
   };
 
   // Fetch users on component mount
   useEffect(() => {
+    setLoading(true); // Set loading true only on initial mount
     fetchUsers();
-  }, []);
+  }, [fetchedsucess]);
+
+  // CORRECTED: Function to handle the permission toggle
+  const handlePermissionToggle = async (userId, currentPermission) => {
+    const newPermission = !currentPermission;
+
+    try {
+      // Send the API request to the backend
+      await apiClient.put(`/users/${userId}/permissions`, {
+        canDownload: newPermission,
+      });
+      toast.success(
+        `Downloads ${newPermission ? "enabled" : "disabled"} for user.`
+      );
+      // On success, refetch the user list to ensure UI is in sync with the database
+      await fetchUsers();
+    } catch (err) {
+      toast.error("Failed to update permission. Please try again.");
+      console.error("Failed to toggle permission:", err);
+    }
+  };
 
   if (loading) {
     return (
@@ -66,7 +102,6 @@ const UsersManagement = () => {
         </button>
       </div>
 
-      {/* User Table */}
       <div className="bg-white p-6 rounded-lg shadow-md">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -94,9 +129,9 @@ const UsersManagement = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {users.map((user) => (
-                <tr key={user.id}>
+                <tr key={user.uid}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {user.name}
+                    {user.name || user.displayName}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {user.username}
@@ -112,14 +147,39 @@ const UsersManagement = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                     <button
+                      onClick={() =>
+                        handlePermissionToggle(user.id, user.canDownloadFiles)
+                      } // CORRECTED: from user.id to user.uid
+                      className={`p-1 rounded-full ${
+                        user.canDownloadFiles
+                          ? "text-green-600 hover:bg-green-100"
+                          : "text-gray-500 hover:bg-gray-100"
+                      }`}
+                      title={
+                        user.canDownloadFiles
+                          ? "Disable Downloads"
+                          : "Enable Downloads"
+                      }
+                    >
+                      {user.canDownloadFiles ? (
+                        <Download className="w-5 h-5" />
+                      ) : (
+                        <h1>Download off</h1>
+                        // <DownloadOff className="w-5 h-5" /> // CORRECTED: Re-added the correct icon
+                      )}
+                    </button>
+
+                    <button
                       onClick={() => setEditingUser(user)}
                       className="text-indigo-600 hover:text-indigo-900"
+                      title="Edit User"
                     >
                       <Edit className="w-5 h-5" />
                     </button>
                     <button
                       onClick={() => setDeletingUser(user)}
                       className="text-red-600 hover:text-red-900"
+                      title="Delete User"
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>

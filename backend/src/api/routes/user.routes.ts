@@ -22,7 +22,7 @@ router.post("/", isAuthenticated, isAdmin, createUser);
 
 // Update a user.
 router.put("/:id", isAuthenticated, isAdmin, updateUser);
-router.put('/:userId/permissions', isAdmin, updateUserPermissions);
+router.put('/:userId/permissions', isAuthenticated, isAdmin, updateUserPermissions);
 
 // Delete a user.
 router.delete("/:id", isAuthenticated, isAdmin, deleteUser);
