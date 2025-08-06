@@ -523,78 +523,80 @@ class _DataScreenState extends State<DataScreen> {
                       );
                     },
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12.0),
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.delete),
-                      label: const Text('Delete All Local Records'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: () async {
-                        // Show confirmation dialog
-                        bool? confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (context) {
-                            return AlertDialog(
-                              title: const Text('Are you sure?'),
-                              content: const Text(
-                                  'Do you really want to delete all local records? This action cannot be undone.'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.pop(context, false), // Cancel
-                                  child: const Text('No'),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () =>
-                                      Navigator.pop(context, true), // Confirm
-                                  style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red),
-                                  child: const Text('Yes'),
-                                ),
-                              ],
-                            );
-                          },
-                        );
+                Padding(
+  padding: const EdgeInsets.symmetric(vertical: 12.0),
+  child: Align(
+    alignment: Alignment.centerLeft, // ✅ Left align the button
+    child: ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.red, // 🔴 Red background
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.all(12), // Slight padding for icon
+        shape: const CircleBorder(), // ✅ Make button circular (optional)
+      ),
+      onPressed: () async {
+        // Show confirmation dialog
+        bool? confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('Are you sure?'),
+              content: const Text(
+                  'Do you really want to delete all local records? This action cannot be undone.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false), // Cancel
+                  child: const Text('No'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true), // Confirm
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Yes'),
+                ),
+              ],
+            );
+          },
+        );
 
-                        if (confirmed == true) {
-                          try {
-                            final provider = Provider.of<DataProvider>(context,
-                                listen: false);
-                            await provider.deleteAllLocalRecords();
+        if (confirmed == true) {
+          try {
+            final provider =
+                Provider.of<DataProvider>(context, listen: false);
+            await provider.deleteAllLocalRecords();
 
-                            setState(() {
-                              _searchResults = [];
-                              _selectedRecord = null;
-                              _isUniqueIdGenerated = false;
-                            });
+            setState(() {
+              _searchResults = [];
+              _selectedRecord = null;
+              _isUniqueIdGenerated = false;
+            });
 
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'All local records deleted successfully!'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content:
-                                    Text('Error deleting local records: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        } else {
-                          print('User cancelled deleting all local records.');
-                        }
-                      },
-                    ),
-                  ),
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('All local records deleted successfully!'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error deleting local records: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } else {
+          print('User cancelled deleting all local records.');
+        }
+      },
+      // ✅ Icon only (No label text)
+      child: const Icon(Icons.delete, size: 24),
+    ),
+  ),
+),
                 ],
-              );
+              );  
+              
             },
           ),
 
