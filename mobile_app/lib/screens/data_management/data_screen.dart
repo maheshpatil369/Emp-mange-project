@@ -58,7 +58,7 @@ class _DataScreenState extends State<DataScreen> {
   void _startSyncCooldown() {
     setState(() {
       _isSyncCooldown = true;
-      _syncCooldownSeconds = 10; // 10 seconds cooldown
+      _syncCooldownSeconds = 3; // 10 seconds cooldown
     });
 
     _syncCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -219,7 +219,8 @@ class _DataScreenState extends State<DataScreen> {
                               prefixIcon: const Icon(Icons.search),
                               suffixIcon: _searchController.text.isNotEmpty
                                   ? IconButton(
-                                      icon: const Icon(Icons.clear),
+                                      icon: const Icon(Icons.clear,
+                                          color: Colors.red),
                                       onPressed: () {
                                         _searchController.clear();
                                         setState(() {
@@ -584,80 +585,87 @@ class _DataScreenState extends State<DataScreen> {
                       );
                     },
                   ),
-                Padding(
-  padding: const EdgeInsets.symmetric(vertical: 12.0),
-  child: Align(
-    alignment: Alignment.centerLeft, // ✅ Left align the button
-    child: ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.red, // 🔴 Red background
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.all(12), // Slight padding for icon
-        shape: const CircleBorder(), // ✅ Make button circular (optional)
-      ),
-      onPressed: () async {
-        // Show confirmation dialog
-        bool? confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: const Text('Are you sure?'),
-              content: const Text(
-                  'Do you really want to delete all local records? This action cannot be undone.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false), // Cancel
-                  child: const Text('No'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, true), // Confirm
-                  style:
-                      ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  child: const Text('Yes'),
-                ),
-              ],
-            );
-          },
-        );
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    child: Align(
+                      alignment:
+                          Alignment.centerLeft, // ✅ Left align the button
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red, // 🔴 Red background
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.all(
+                              12), // Slight padding for icon
+                          shape:
+                              const CircleBorder(), // ✅ Make button circular (optional)
+                        ),
+                        onPressed: () async {
+                          // Show confirmation dialog
+                          bool? confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (context) {
+                              return AlertDialog(
+                                title: const Text('Are you sure?'),
+                                content: const Text(
+                                    'Do you really want to delete all local records? This action cannot be undone.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, false), // Cancel
+                                    child: const Text('No'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, true), // Confirm
+                                    style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red),
+                                    child: const Text('Yes'),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
 
-        if (confirmed == true) {
-          try {
-            final provider =
-                Provider.of<DataProvider>(context, listen: false);
-            await provider.deleteAllLocalRecords();
+                          if (confirmed == true) {
+                            try {
+                              final provider = Provider.of<DataProvider>(
+                                  context,
+                                  listen: false);
+                              await provider.deleteAllLocalRecords();
 
-            setState(() {
-              _searchResults = [];
-              _selectedRecord = null;
-              _isUniqueIdGenerated = false;
-            });
+                              setState(() {
+                                _searchResults = [];
+                                _selectedRecord = null;
+                                _isUniqueIdGenerated = false;
+                              });
 
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('All local records deleted successfully!'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          } catch (e) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Error deleting local records: $e'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        } else {
-          print('User cancelled deleting all local records.');
-        }
-      },
-      // ✅ Icon only (No label text)
-      child: const Icon(Icons.delete, size: 24),
-    ),
-  ),
-),
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'All local records deleted successfully!'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content:
+                                      Text('Error deleting local records: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          } else {
+                            print('User cancelled deleting all local records.');
+                          }
+                        },
+                        // ✅ Icon only (No label text)
+                        child: const Icon(Icons.delete, size: 24),
+                      ),
+                    ),
+                  ),
                 ],
-              );  
-              
+              );
             },
           ),
 
@@ -668,7 +676,7 @@ class _DataScreenState extends State<DataScreen> {
               left: 0,
               right: 0,
               child: Container(
-                height: 605, // Fixed height to prevent overflow
+                height: 590, // Fixed height to prevent overflow
                 margin: const EdgeInsets.all(16.0),
                 padding: const EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
@@ -725,8 +733,13 @@ class _DataScreenState extends State<DataScreen> {
                         child: _buildRecordDetails(),
                       ),
                     ),
+                    // const SizedBox(height: 16),
+                    // _buildActionButtons(),
                     const SizedBox(height: 16),
-                    _buildActionButtons(),
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 24),
+                      child: _buildActionButtons(),
+                    ),
                   ],
                 ),
               ),
@@ -1178,10 +1191,36 @@ class _DataScreenState extends State<DataScreen> {
                               ..['UniqueId'] = uniqueId;
                       });
 
+                      // ScaffoldMessenger.of(context).showSnackBar(
+                      //   SnackBar(
+                      //     content: Text('Unique ID generated: $uniqueId'),
+                      //     backgroundColor: Colors.green,
+                      //   ),
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Unique ID generated: $uniqueId'),
+                         duration: const Duration(seconds: 2), // ⏱ Timer added
                           backgroundColor: Colors.green,
+                          content: RichText(
+                            text: TextSpan(
+                              children: [
+                                const TextSpan(
+                                  text: 'Unique ID generated: ',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: uniqueId,
+                                  style: const TextStyle(
+                                    fontSize: 16, // 🔠 Bigger font
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       );
                     } catch (e) {
@@ -1288,9 +1327,9 @@ class _DataScreenState extends State<DataScreen> {
                           const SnackBar(
                             content: Text('Record saved to temporary storage!'),
                             backgroundColor: Colors.green,
+                            duration: Duration(seconds: 1), // ⏱ Show for 1 second
                           ),
                         );
-
                         // Clear the selected record after successful save
                         setState(() {
                           _selectedRecord = null;
