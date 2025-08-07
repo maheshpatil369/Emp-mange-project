@@ -172,6 +172,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
                   onPressed: () async {
+                    // Get DataProvider to check for unsynced records
+                    final dataProvider =
+                        Provider.of<DataProvider>(context, listen: false);
+
+                    // Check if there are unsynced records
+                    final hasUnsynced = await dataProvider.hasUnsyncedRecords;
+                    
+                    if (hasUnsynced) {
+                      // Show popup that prevents logout
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Cannot Logout'),
+                          content: const Text(
+                            'You have unsynced records in temporary storage. Please sync all records to server before logging out.'
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                      return; // Prevent logout
+                    }
+
                     // Show loading indicator
                     showDialog(
                       context: context,
@@ -182,10 +209,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     );
 
                     try {
-                      // Get DataProvider to save current state before clearing
-                      final dataProvider =
-                          Provider.of<DataProvider>(context, listen: false);
-
                       // CRITICAL: Save current bundles AND records state to SharedPreferences BEFORE clearing
                       await dataProvider.saveDataBeforeLogout();
 

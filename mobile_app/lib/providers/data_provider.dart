@@ -888,6 +888,12 @@ class DataProvider with ChangeNotifier {
     }
   }
 
+  // Check if temporary table is empty (getter for logout check)
+  Future<bool> get hasUnsyncedRecords async {
+    final count = await getRecordsToSyncCount();
+    return count > 0;
+  }
+
   // Sync records to server
   Future<bool> syncRecordsToServer() async {
     try {
