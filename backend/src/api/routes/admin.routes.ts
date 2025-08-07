@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   exportCombinedData,
+  exportDuplicateLog,
   forceCompleteBundle,
   getAnalyticsPageData,
   getBundleCountersStatus,
@@ -29,7 +30,20 @@ router.get(
 );
 
 // GET /api/admin/export/processed/:location
-router.get('/export/processed/:location', isAuthenticated, isAdmin, exportCombinedData);
+router.get(
+  "/export/processed/:location",
+  isAuthenticated,
+  isAdmin,
+  exportCombinedData
+);
+
+// Route to export the log of all saved duplicate records for a location
+router.get(
+  "/export/duplicate-log/:location",
+  isAuthenticated,
+  isAdmin,
+  exportDuplicateLog
+);
 
 // POST /api/admin/reset-progress
 router.post("/reset-progress", isAuthenticated, isAdmin, resetUserProgress);
@@ -65,9 +79,9 @@ router.get(
 );
 
 // The query will now be like: /api/admin/records/search?searchFromId=12345
-router.get('/records/search', isAuthenticated, isAdmin, searchRecordById);
+router.get("/records/search", isAuthenticated, isAdmin, searchRecordById);
 
-// Mark Incomplete as Complete Route 
+// Mark Incomplete as Complete Route
 router.post(
   "/mark-incomplete-complete",
   isAuthenticated,

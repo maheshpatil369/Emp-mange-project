@@ -71,12 +71,10 @@ export const forceCompleteBundle = async (
     const { userId, taluka, bundleNo } = req.body;
 
     if (!userId || !taluka || !bundleNo) {
-      return res
-        .status(400)
-        .json({
-          message:
-            'Bad Request: "userId", "taluka", and "bundleNo" are required.',
-        });
+      return res.status(400).json({
+        message:
+          'Bad Request: "userId", "taluka", and "bundleNo" are required.',
+      });
     }
 
     // The service needs the location, which we can get from the user's profile.
@@ -115,12 +113,10 @@ export const manualAssignBundle = async (
     const { userId, taluka, bundleNo } = req.body;
 
     if (!userId || !taluka || !bundleNo) {
-      return res
-        .status(400)
-        .json({
-          message:
-            'Bad Request: "userId", "taluka", and "bundleNo" are required.',
-        });
+      return res.status(400).json({
+        message:
+          'Bad Request: "userId", "taluka", and "bundleNo" are required.',
+      });
     }
 
     const assignedBundle = await firebaseService.manualAssignBundleToUserInDB(
@@ -170,11 +166,9 @@ export const exportCombinedData = async (
     ]);
 
     if (records.length === 0) {
-      res
-        .status(404)
-        .json({
-          message: `No processed records found for location: ${location}`,
-        });
+      res.status(404).json({
+        message: `No processed records found for location: ${location}`,
+      });
       return;
     }
 
@@ -203,7 +197,6 @@ export const exportCombinedData = async (
 
     // 5. Send the single file buffer as the response.
     res.send(fileBuffer);
-
   } catch (error: any) {
     console.error("Error exporting combined data:", error);
     res.status(500).json({ message: "Internal Server Error" });
@@ -219,12 +212,9 @@ export const resetAllProcessedData = async (
 ): Promise<Response> => {
   try {
     await firebaseService.resetAllProcessedDataInDB();
-    return res
-      .status(200)
-      .json({
-        message:
-          "DANGER ZONE: All processed data has been permanently deleted.",
-      });
+    return res.status(200).json({
+      message: "DANGER ZONE: All processed data has been permanently deleted.",
+    });
   } catch (error: any) {
     console.error("Error resetting all processed data:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -240,12 +230,10 @@ export const resetAllCounters = async (
 ): Promise<Response> => {
   try {
     await firebaseService.resetAllCountersInDB();
-    return res
-      .status(200)
-      .json({
-        message:
-          "DANGER ZONE: All bundle counters and user states have been reset.",
-      });
+    return res.status(200).json({
+      message:
+        "DANGER ZONE: All bundle counters and user states have been reset.",
+    });
   } catch (error: any) {
     console.error("Error resetting all counters:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -291,8 +279,6 @@ export const getAnalyticsPageData = async (
   }
 };
 
-
-
 /**
  * Controller to search for a single processed record by its "Search from" ID.
  */
@@ -304,11 +290,9 @@ export const searchRecordById = async (
     // Use a more descriptive query param name
     const { searchFromId } = req.query;
     if (!searchFromId) {
-      return res
-        .status(400)
-        .json({
-          message: 'Bad Request: "searchFromId" query parameter is required.',
-        });
+      return res.status(400).json({
+        message: 'Bad Request: "searchFromId" query parameter is required.',
+      });
     }
 
     const record = await firebaseService.searchProcessedRecordBySearchFromId(
@@ -316,11 +300,9 @@ export const searchRecordById = async (
     );
 
     if (!record) {
-      return res
-        .status(404)
-        .json({
-          message: `Record with "Search from" ID "${searchFromId}" not found.`,
-        });
+      return res.status(404).json({
+        message: `Record with "Search from" ID "${searchFromId}" not found.`,
+      });
     }
 
     return res.status(200).json(record);
@@ -329,8 +311,6 @@ export const searchRecordById = async (
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
-
 
 /**
  * Controller to mark an incomplete bundle as complete.
@@ -347,16 +327,59 @@ export const markIncompleteAsComplete = async (
         .json({ message: 'Bad Request: "userId" and "taluka" are required.' });
     }
     await firebaseService.clearUserActiveBundleInDB(userId, taluka);
-    return res
-      .status(200)
-      .json({
-        message: `Successfully cleared active bundle for user ${userId} in ${taluka}.`,
-      });
+    return res.status(200).json({
+      message: `Successfully cleared active bundle for user ${userId} in ${taluka}.`,
+    });
   } catch (error: any) {
     if (error.message.includes("no active bundle")) {
       return res.status(404).json({ message: error.message });
     }
     console.error("Error marking incomplete bundle as complete:", error);
     return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+/**
+ * Controller to export all saved duplicate records for a location.
+ */
+export const exportDuplicateLog = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { location } = req.params;
+
+    // 1. Fetch all duplicate records and all users
+    const [duplicateRecords, users] = await Promise.all([
+      firebaseService.getDuplicateRecordsFromDB(location as string),
+      firebaseService.getAllUsersFromDB(),
+    ]);
+
+    if (duplicateRecords.length === 0) {
+      res
+        .status(404)
+        .json({ message: "No duplicate records found to export." });
+      return;
+    }
+
+    // 2. Generate the Excel file using the new export service function
+    const fileBuffer = await exportService.generateDuplicateLogExcel(
+      duplicateRecords,
+      users
+    );
+
+    // 3. Set headers and send the file
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${location}-duplicate-log.xlsx"`
+    );
+    res.send(fileBuffer);
+  } catch (error: any) {
+    console.error("Error exporting duplicate log:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };

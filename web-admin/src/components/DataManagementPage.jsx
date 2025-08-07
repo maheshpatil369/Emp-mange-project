@@ -66,6 +66,7 @@ export const DataManagementHub = () => {
       <SearchRecord />
       <BundleCountersStatus locations={locations} />
       <DownloadRecords locations={locations} />
+      <DownloadDuplicateLog locations={locations} />
       <AdminTools users={users} config={config} />
       <DangerZone />
     </div>
@@ -553,6 +554,79 @@ const DownloadRecords = ({ locations }) => {
   );
 };
 
+const DownloadDuplicateLog = ({ locations }) => {
+  const [selectedLocation, setSelectedLocation] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleDownload = async () => {
+    if (!selectedLocation) return;
+    setLoading(true);
+    try {
+      // Use the new API endpoint for the duplicate log
+      const response = await apiClient.get(
+        `/admin/export/duplicate-log/${selectedLocation}`,
+        {
+          responseType: "blob",
+        }
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      // Set a new filename for the duplicate log
+      const fileName = `${selectedLocation}-duplicate-log-${new Date()
+        .toISOString()
+        .slice(0, 10)}.xlsx`;
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      toast.error(
+        "Failed to download duplicate log. There might be no duplicate data for this location."
+      );
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-md">
+      <h2 className="text-xl font-semibold text-gray-700">
+        Download Duplicate Records Log
+      </h2>
+      <p className="text-gray-500 mt-2 text-sm">
+        Download an Excel file of all records that were submitted as duplicates.
+      </p>
+      <div className="mt-4 flex items-center space-x-4">
+        <select
+          onChange={(e) => setSelectedLocation(e.target.value)}
+          className="flex-1 p-2 border rounded-md bg-gray-50"
+        >
+          <option value="">Select a location</option>
+          {locations.map((loc) => (
+            <option key={loc.slug} value={loc.slug}>
+              {loc.name}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={handleDownload}
+          disabled={!selectedLocation || loading}
+          className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:bg-orange-300"
+        >
+          {loading ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Download className="w-5 h-5 mr-2" />
+          )}
+          Download Duplicates
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const AdminTools = ({ users, config }) => {
   return (
     <div className="bg-white p-6 rounded-lg shadow-md space-y-8">
@@ -697,7 +771,7 @@ const MarkIncompleteForm = ({ users, config }) => {
       setTalukas([]);
     }
     setFormData((prev) => ({ ...prev, taluka: "" }));
-  }, [formData.userId, config, users]);
+  }, [formData.userId, config, users, selectedUser]);
 
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -776,7 +850,7 @@ const ForceCompleteForm = ({ users, config }) => {
       setTalukas([]);
     }
     setFormData((prev) => ({ ...prev, taluka: "" }));
-  }, [formData.userId, config, users]);
+  }, [formData.userId, config, users, selectedUser]);
 
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -859,7 +933,7 @@ const ManualAssignForm = ({ users, config }) => {
       setTalukas([]);
     }
     setFormData((prev) => ({ ...prev, taluka: "" }));
-  }, [formData.userId, config, users]);
+  }, [formData.userId, config, users, selectedUser]);
 
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -942,7 +1016,7 @@ const ResetProgressForm = ({ users, config }) => {
       setTalukas([]);
     }
     setFormData((prev) => ({ ...prev, taluka: "" }));
-  }, [formData.userId, config, users]);
+  }, [formData.userId, config, users, selectedUser]);
 
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });

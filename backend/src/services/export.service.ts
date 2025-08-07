@@ -139,3 +139,22 @@ export async function generateCombinedExportExcel(
   const arrayBuffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(arrayBuffer);
 }
+
+/**
+ * Generates an Excel file for the log of submitted duplicate records.
+ * @param records - An array of duplicate records fetched from /duplicateRecords.
+ * @param users - An array of all users for data enrichment.
+ * @returns A promise that resolves to the Excel file as a Buffer.
+ */
+export async function generateDuplicateLogExcel(
+  records: any[],
+  users: User[]
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+
+  // Add a single sheet for the duplicate log.
+  addSheetToWorkbook(workbook, records, users, "Duplicate Submission Log");
+
+  const arrayBuffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(arrayBuffer);
+}

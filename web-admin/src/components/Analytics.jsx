@@ -1,5 +1,3 @@
-// File: src/components/Analytics.jsx
-
 import React, { useState, useEffect, useMemo } from "react";
 import {
   BarChart,
@@ -20,9 +18,11 @@ import {
   Loader2,
   AlertTriangle,
   FileWarning,
+  ChevronDown,
+  ChevronRight,
+  CopyX, // Icon for duplicates
 } from "lucide-react";
 import apiClient from "../lib/axios";
-import { ChevronDown, ChevronRight } from "lucide-react";
 
 const AnalyticsPage = () => {
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -57,11 +57,10 @@ const AnalyticsPage = () => {
 
   if (loading) {
     return (
-    <div className="flex flex-col items-center justify-center min-h-screen space-y-3">
-  <Loader2 className="w-10 h-10 animate-spin text-green-500" />
-  <p className="text-black font-medium text-lg">Loading Analytics...</p>
-</div>
-
+      <div className="flex flex-col items-center justify-center min-h-screen space-y-3">
+        <Loader2 className="w-10 h-10 animate-spin text-green-500" />
+        <p className="text-black font-medium text-lg">Loading Analytics...</p>
+      </div>
     );
   }
 
@@ -91,7 +90,7 @@ const AnalyticsPage = () => {
       <h1 className="text-3xl font-bold text-gray-800">Analytics Dashboard</h1>
 
       {/* Statistic Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-6">
         <StatCard
           icon={<FileText />}
           title="Total Excel Records"
@@ -114,6 +113,12 @@ const AnalyticsPage = () => {
           title="PDFs Required"
           value={stats?.pdfRequired}
           color="text-red-500"
+        />
+        <StatCard
+          icon={<CopyX />}
+          title="Total Duplicates"
+          value={stats?.totalDuplicates}
+          color="text-purple-500"
         />
         <StatCard
           icon={<Users />}
@@ -149,6 +154,9 @@ const AnalyticsPage = () => {
       {/* Other Analytics Tables */}
       <ProcessingStatusByFile data={analyticsData?.processingStatusByFile} />
       <UserLeaderboard data={analyticsData?.userLeaderboard} />
+      <DuplicateLeaderboard
+        data={analyticsData?.duplicateStats?.duplicateLeaderboard}
+      />
       <BundleCompletionSummary
         data={filteredBundleSummary}
         config={config}
@@ -241,7 +249,6 @@ const UserLeaderboard = ({ data = [] }) => {
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
-      {/* Header with collapse toggle */}
       <div
         className="flex justify-between items-center cursor-pointer"
         onClick={() => setIsOpen(!isOpen)}
@@ -258,19 +265,17 @@ const UserLeaderboard = ({ data = [] }) => {
         >
           {isOpen ? (
             <>
-              <ChevronDown size={14} className="text-gray-700" />
+              <ChevronDown size={14} />
               Collapse
             </>
           ) : (
             <>
-              <ChevronRight size={14} className="text-gray-700" />
+              <ChevronRight size={14} />
               Expand
             </>
           )}
         </button>
       </div>
-
-      {/* Collapsible content */}
       {isOpen && (
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -305,6 +310,84 @@ const UserLeaderboard = ({ data = [] }) => {
                 <tr>
                   <td colSpan={3} className="text-center py-6 text-gray-500">
                     No data available.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const DuplicateLeaderboard = ({ data = [] }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const rankedData = data.map((user, index) => ({ ...user, rank: index + 1 }));
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-md">
+      <div
+        className="flex justify-between items-center cursor-pointer"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <h2 className="text-xl font-semibold text-gray-700">
+          Duplicate Submissions Leaderboard
+        </h2>
+        <button
+          className="flex items-center gap-1.5 px-2.5 py-1 border border-gray-300 rounded bg-white hover:bg-gray-100 shadow-sm text-gray-700 text-sm font-medium transition"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }}
+        >
+          {isOpen ? (
+            <>
+              <ChevronDown size={14} />
+              Collapse
+            </>
+          ) : (
+            <>
+              <ChevronRight size={14} />
+              Expand
+            </>
+          )}
+        </button>
+      </div>
+      {isOpen && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Rank
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  User Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Duplicate Count
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {rankedData.map((user) => (
+                <tr key={user.userName}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold">
+                    {user.rank}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {user.userName}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                    {user.duplicateCount.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+              {rankedData.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="text-center py-6 text-gray-500">
+                    No duplicate data available.
                   </td>
                 </tr>
               )}
