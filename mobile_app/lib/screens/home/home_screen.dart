@@ -130,10 +130,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Check if there's an error and no data to display.
           // Fallback to offline display.
-          bool isOfflinePage = isOffline ||
-              (dataProvider.errorMessage != null &&
-                  dataProvider.errorMessage!
-                      .contains('Failed to load configuration'));
+          bool isOfflinePage = isOffline;
+          (dataProvider.errorMessage != null &&
+              dataProvider.errorMessage!
+                  .contains('Failed to load configuration'));
 
           // List<String> availableTalukas = dataProvider.filteredTalukas;
           String? userDistrictSlug;
@@ -216,7 +216,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Row(
                       children: [
                         Icon(Icons.location_on,
-                            color: isOfflinePage ? Colors.orange : Colors.green),
+                            color:
+                                isOfflinePage ? Colors.orange : Colors.green),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Column(
