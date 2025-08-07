@@ -1,6 +1,4 @@
 /* eslint-disable no-unused-vars */
-// File: src/components/UsersManagement.jsx
-
 import React, { useState, useEffect } from "react";
 import {
   PlusCircle,
@@ -9,29 +7,55 @@ import {
   Edit,
   Trash2,
   Download,
-  CloudOff,
-  // DownloadOff
+  DownloadCloud, // A more descriptive icon for disabled downloads
+  UsersRound, // Icon for empty state
+  X, // Icon for closing modals
 } from "lucide-react";
 import apiClient from "../lib/axios";
 import toast from "react-hot-toast";
 
+// --- NEW: Skeleton Component for a single table row ---
+const UserTableRowSkeleton = () => (
+  <tr className="animate-pulse">
+    <td className="px-6 py-4">
+      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+    </td>
+    <td className="px-6 py-4">
+      <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+    </td>
+    <td className="px-6 py-4">
+      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+    </td>
+    <td className="px-6 py-4">
+      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+    </td>
+    <td className="px-6 py-4">
+      <div className="h-4 bg-gray-200 rounded w-full"></div>
+    </td>
+    <td className="px-6 py-4">
+      <div className="flex justify-end space-x-2">
+        <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+        <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+        <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+      </div>
+    </td>
+  </tr>
+);
+
+// --- Main User Management Component ---
 const UsersManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [fetchedsucess, setFetchedSucess] = useState(true);
-  // State for modals
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [deletingUser, setDeletingUser] = useState(null);
 
-  // Function to fetch users
   const fetchUsers = async () => {
     try {
-      // Don't set loading to true here on refetch, to avoid screen flicker
       setError("");
       const response = await apiClient.get("/users");
-
       const usersWithDefaults = response.data.map((user) => ({
         ...user,
         canDownloadFiles:
@@ -39,159 +63,162 @@ const UsersManagement = () => {
       }));
       setUsers(usersWithDefaults);
     } catch (err) {
-      setError("Failed to fetch users.");
+      setError(
+        "Failed to fetch users. Please check your connection and try again."
+      );
       console.error(err);
     } finally {
-      // Only set loading to false on the initial load
-      if (loading) setLoading(false);
+      setLoading(false);
     }
   };
 
-  // Fetch users on component mount
   useEffect(() => {
-    setLoading(true); // Set loading true only on initial mount
     fetchUsers();
-  }, [fetchedsucess]);
+  }, []);
 
-  // CORRECTED: Function to handle the permission toggle
   const handlePermissionToggle = async (userId, currentPermission) => {
-    const newPermission = !currentPermission;
-
     try {
-      // Send the API request to the backend
       await apiClient.put(`/users/${userId}/permissions`, {
-        canDownload: newPermission,
+        canDownload: !currentPermission,
       });
       toast.success(
-        `Downloads ${newPermission ? "enabled" : "disabled"} for user.`
+        `Downloads ${!currentPermission ? "enabled" : "disabled"} for user.`
       );
-      // On success, refetch the user list to ensure UI is in sync with the database
-      await fetchUsers();
+      fetchUsers();
     } catch (err) {
-      toast.error("Failed to update permission. Please try again.");
+      toast.error("Failed to update permission.");
       console.error("Failed to toggle permission:", err);
     }
   };
 
-  if (loading) {
-    return (
-  <div className="flex flex-col items-center justify-center min-h-screen space-y-3">
-  <Loader2 className="w-10 h-10 animate-spin text-green-500" />
-  <p className="text-black font-medium text-lg">Loading Users...</p>
-</div>
+  const renderTableContent = () => {
+    if (loading) {
+      return Array.from({ length: 5 }).map((_, i) => (
+        <UserTableRowSkeleton key={i} />
+      ));
+    }
 
+    if (users.length === 0) {
+      return (
+        <tr>
+          <td colSpan="6" className="text-center py-16">
+            <div className="flex flex-col items-center justify-center text-gray-500">
+              <UsersRound className="w-16 h-16 mb-4" />
+              <h3 className="text-xl font-semibold">No Users Found</h3>
+              <p className="mb-4">Get started by creating a new user.</p>
+              <button
+                onClick={() => setIsCreateModalOpen(true)}
+                className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <PlusCircle className="w-5 h-5 mr-2" />
+                Create New User
+              </button>
+            </div>
+          </td>
+        </tr>
+      );
+    }
 
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full text-red-600 bg-red-50 p-4 rounded-lg">
-        <AlertTriangle className="w-6 h-6 mr-2" /> {error}
-      </div>
-    );
-  }
+    return users.map((user) => (
+      <tr key={user.id} className="hover:bg-gray-50">
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+          {user.name}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+          {user.username}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+          {user.mobile}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+          {user.location}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+          {user.excelFile || "N/A"}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+          <div className="flex items-center justify-end space-x-2">
+            <button
+              onClick={() =>
+                handlePermissionToggle(user.id, user.canDownloadFiles)
+              }
+              className="p-2 rounded-full transition-colors hover:bg-gray-100"
+              title={
+                user.canDownloadFiles ? "Disable Downloads" : "Enable Downloads"
+              }
+            >
+              {user.canDownloadFiles ? (
+                <Download className="w-5 h-5 text-green-600" />
+              ) : (
+                <DownloadCloud className="w-5 h-5 text-gray-400" />
+              )}
+            </button>
+            <button
+              onClick={() => setEditingUser(user)}
+              className="p-2 rounded-full transition-colors text-blue-600 hover:bg-blue-50"
+              title="Edit User"
+            >
+              <Edit className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setDeletingUser(user)}
+              className="p-2 rounded-full transition-colors text-red-600 hover:bg-red-50"
+              title="Delete User"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
+        </td>
+      </tr>
+    ));
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-800">User Management</h1>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          className="flex items-center justify-center px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
         >
           <PlusCircle className="w-5 h-5 mr-2" />
           Create New User
         </button>
       </div>
 
-      <div className="bg-white p-6 rounded-lg shadow-md">
+      {error && (
+        <div className="flex items-center justify-center text-red-600 bg-red-50 p-4 rounded-lg">
+          <AlertTriangle className="w-6 h-6 mr-3" /> {error}
+        </div>
+      )}
+
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Full Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Username
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Mobile
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Location
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Assigned Excel
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {users.map((user) => (
-                <tr key={user.uid}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {user.name || user.displayName}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.username}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.mobile}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.location}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.excelFile || "N/A"}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                    <button
-                      onClick={() =>
-                        handlePermissionToggle(user.id, user.canDownloadFiles)
-                      } // CORRECTED: from user.id to user.uid
-                      className={`p-1 rounded-full ${
-                        user.canDownloadFiles
-                          ? "text-green-600 hover:bg-green-100"
-                          : "text-gray-500 hover:bg-gray-100"
-                      }`}
-                      title={
-                        user.canDownloadFiles
-                          ? "Disable Downloads"
-                          : "Enable Downloads"
-                      }
-                    >
-                      {user.canDownloadFiles ? (
-                        <Download className="w-5 h-5" />
-                      ) : (
-                       <CloudOff className="w-6 h-6 text-red-500" />
-
-
-                        // <DownloadOff className="w-5 h-5" /> // CORRECTED: Re-added the correct icon
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => setEditingUser(user)}
-                      className="text-indigo-600 hover:text-indigo-900"
-                      title="Edit User"
-                    >
-                      {/* <Edit className="w-5 h-5" /> */}
-                      <Edit className="w-5 h-5 text-purple-600 hover:text-purple-800 cursor-pointer" />
-                    </button>
-                    <button
-                      onClick={() => setDeletingUser(user)}
-                      className="text-red-600 hover:text-red-900"
-                      title="Delete User"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {renderTableContent()}
             </tbody>
           </table>
         </div>
@@ -203,7 +230,6 @@ const UsersManagement = () => {
           onUserCreated={fetchUsers}
         />
       )}
-
       {editingUser && (
         <EditUserModal
           user={editingUser}
@@ -211,7 +237,6 @@ const UsersManagement = () => {
           onUserUpdated={fetchUsers}
         />
       )}
-
       {deletingUser && (
         <DeleteUserModal
           user={deletingUser}
@@ -222,6 +247,16 @@ const UsersManagement = () => {
     </div>
   );
 };
+
+// --- Helper Component for Form Fields ---
+const FormField = ({ label, children }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {label}
+    </label>
+    {children}
+  </div>
+);
 
 // --- Create User Modal Component ---
 const CreateUserModal = ({ closeModal, onUserCreated }) => {
@@ -238,6 +273,9 @@ const CreateUserModal = ({ closeModal, onUserCreated }) => {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const inputStyles =
+    "w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 transition";
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -273,9 +311,13 @@ const CreateUserModal = ({ closeModal, onUserCreated }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleMobileChange = (e) => {
+    const numericValue = e.target.value.replace(/\D/g, "").slice(0, 10);
+    handleChange({ target: { name: "mobile", value: numericValue } });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
     try {
       await apiClient.post("/users", formData);
@@ -290,106 +332,105 @@ const CreateUserModal = ({ closeModal, onUserCreated }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-2xl">
-        <h2 className="text-2xl font-bold mb-6">Create New User</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl relative">
+        <button
+          onClick={closeModal}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+        >
+          <X />
+        </button>
+        <h2 className="text-2xl font-bold mb-6 text-gray-800">
+          Create New User
+        </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input
-              name="name"
-              placeholder="Full Name"
-              onChange={handleChange}
-              required
-              className="p-2 border rounded"
-            />
-            <input
-              name="username"
-              placeholder="Username"
-              onChange={handleChange}
-              required
-              className="p-2 border rounded"
-            />
-            {/* <input
-              name="mobile"
-              placeholder="Mobile Number"
-              onChange={handleChange}
-              required
-              className="p-2 border rounded"
-            /> */}
-
-            <div className="flex items-center border rounded overflow-hidden w-full max-w-xs">
-  {/* Fixed +91 Prefix */}
-  <span className="px-2 bg-gray-100 text-gray-700 border-r select-none">+91</span>
-  
-  {/* Mobile Number Input */}
-  <input
-    type="tel"
-    name="mobile"
-    value={formData.mobile}
-    placeholder="Mobile Number"
-    onChange={(e) => {
-      // Allow only numbers and limit to 10 digits
-      const numericValue = e.target.value.replace(/\D/g, "").slice(0, 10);
-      handleChange({ target: { name: "mobile", value: numericValue } });
-    }}
-    required
-    className="flex-1 p-2 outline-none"
-  />
-</div>
-
-
-            <select
-              name="location"
-              onChange={handleChange}
-              required
-              className="p-2 border rounded"
-            >
-              <option value="">Select Location</option>
-              {locations.map((loc) => (
-                <option key={loc.slug} value={loc.slug}>
-                  {loc.name}
+            <FormField label="Full Name">
+              <input
+                name="name"
+                onChange={handleChange}
+                required
+                className={inputStyles}
+              />
+            </FormField>
+            <FormField label="Username">
+              <input
+                name="username"
+                onChange={handleChange}
+                required
+                className={inputStyles}
+              />
+            </FormField>
+            <FormField label="Mobile Number">
+              <div className="flex items-center border border-gray-300 rounded-md shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
+                <span className="px-3 bg-gray-50 text-gray-600 border-r border-gray-300 select-none">
+                  +91
+                </span>
+                <input
+                  type="tel"
+                  name="mobile"
+                  value={formData.mobile}
+                  onChange={handleMobileChange}
+                  required
+                  className="flex-1 p-2 border-0 outline-none w-full"
+                />
+              </div>
+            </FormField>
+            <FormField label="Default Password">
+              <input
+                name="password"
+                type="password"
+                onChange={handleChange}
+                required
+                className={inputStyles}
+              />
+            </FormField>
+            <FormField label="Location">
+              <select
+                name="location"
+                onChange={handleChange}
+                required
+                className={inputStyles}
+              >
+                <option value="">Select Location</option>
+                {locations.map((loc) => (
+                  <option key={loc.slug} value={loc.slug}>
+                    {loc.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="Assign Excel File">
+              <select
+                name="excelFile"
+                onChange={handleChange}
+                disabled={!formData.location || files.length === 0}
+                className={`${inputStyles} disabled:bg-gray-100`}
+              >
+                <option value="">
+                  {!formData.location ? "Select location first" : "Select file"}
                 </option>
-              ))}
-            </select>
-            <input
-              name="password"
-              type="password"
-              placeholder="Default Password"
-              onChange={handleChange}
-              required
-              className="p-2 border rounded"
-            />
-            <select
-              name="excelFile"
-              onChange={handleChange}
-              disabled={!formData.location || files.length === 0}
-              className="p-2 border rounded"
-            >
-              <option value="">
-                {!formData.location
-                  ? "Select a location first"
-                  : "Assign Excel File"}
-              </option>
-              {files.map((file) => (
-                <option key={file.id} value={file.name}>
-                  {file.name}
-                </option>
-              ))}
-            </select>
+                {files.map((file) => (
+                  <option key={file.id} value={file.name}>
+                    {file.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
           </div>
-          {error && <p className="text-red-500">{error}</p>}
-          <div className="flex justify-end space-x-4 mt-6">
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
               onClick={closeModal}
-              className="px-4 py-2 bg-gray-200 rounded"
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-blue-300"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md flex items-center justify-center disabled:bg-blue-300 w-32"
             >
               {loading ? <Loader2 className="animate-spin" /> : "Create User"}
             </button>
@@ -400,7 +441,7 @@ const CreateUserModal = ({ closeModal, onUserCreated }) => {
   );
 };
 
-// --- Edit User Modal Component ---
+// --- Edit User Modal Component (Fully Implemented) ---
 const EditUserModal = ({ user, closeModal, onUserUpdated }) => {
   const [formData, setFormData] = useState({
     name: user.name || "",
@@ -413,25 +454,23 @@ const EditUserModal = ({ user, closeModal, onUserUpdated }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        const configRes = await apiClient.get("/data/config");
-        setLocations(configRes.data.locations || []);
+  const inputStyles =
+    "w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 transition";
 
-        if (formData.location) {
-          const filesRes = await apiClient.get(
-            `/data/files/${formData.location}`
-          );
-          setFiles(filesRes.data || []);
-        }
+  // Fetch master list of locations
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await apiClient.get("/data/config");
+        setLocations(response.data.locations || []);
       } catch (err) {
-        setError("Could not load initial data.");
+        setError("Could not load locations.");
       }
     };
-    fetchInitialData();
-  }, [formData.location]);
+    fetchConfig();
+  }, []);
 
+  // Fetch files based on the currently selected location
   useEffect(() => {
     if (formData.location) {
       const fetchFiles = async () => {
@@ -451,16 +490,20 @@ const EditUserModal = ({ user, closeModal, onUserUpdated }) => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     const newFormData = { ...formData, [name]: value };
-    // If the location is changed, reset the excelFile
+    // If the location is changed, reset the excelFile selection
     if (name === "location") {
       newFormData.excelFile = "";
     }
     setFormData(newFormData);
   };
 
+  const handleMobileChange = (e) => {
+    const numericValue = e.target.value.replace(/\D/g, "").slice(0, 10);
+    handleChange({ target: { name: "mobile", value: numericValue } });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
     try {
       await apiClient.put(`/users/${user.id}`, formData);
@@ -475,96 +518,91 @@ const EditUserModal = ({ user, closeModal, onUserUpdated }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-2xl">
-        <h2 className="text-2xl font-bold mb-6">Edit User: {user.username}</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl relative">
+        <button
+          onClick={closeModal}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+        >
+          <X />
+        </button>
+        <h2 className="text-2xl font-bold mb-6 text-gray-800">
+          Edit User: <span className="text-blue-600">{user.username}</span>
+        </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input
-              name="name"
-              value={formData.name}
-              placeholder="Full Name"
-              onChange={handleChange}
-              required
-              className="p-2 border rounded"
-            />
-            {/* <input
-              name="mobile"
-              value={formData.mobile}
-              placeholder="Mobile Number"
-              onChange={handleChange}
-              required
-              className="p-2 border rounded"
-            /> */}
-
-<div className="flex items-center border rounded overflow-hidden w-full max-w-xs">
-  {/* Fixed +91 Prefix */}
-  <span className="px-2 bg-gray-100 text-gray-700 border-r select-none">+91</span>
-  
-  {/* Mobile Number Input */}
-  <input
-    type="tel"
-    name="mobile"
-    value={formData.mobile}
-    placeholder="Mobile Number"
-    onChange={(e) => {
-      // Allow only numbers and limit to 10 digits
-      const numericValue = e.target.value.replace(/\D/g, "").slice(0, 10);
-      handleChange({ target: { name: "mobile", value: numericValue } });
-    }}
-    required
-    className="flex-1 p-2 outline-none"
-  />
-</div>
-
-
-            <select
-              name="location"
-              value={formData.location}
-              onChange={handleChange}
-              required
-              className="p-2 border rounded"
-            >
-              <option value="">Select Location</option>
-              {locations.map((loc) => (
-                <option key={loc.slug} value={loc.slug}>
-                  {loc.name}
+            <FormField label="Full Name">
+              <input
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                required
+                className={inputStyles}
+              />
+            </FormField>
+            <FormField label="Mobile Number">
+              <div className="flex items-center border border-gray-300 rounded-md shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
+                <span className="px-3 bg-gray-50 text-gray-600 border-r border-gray-300 select-none">
+                  +91
+                </span>
+                <input
+                  type="tel"
+                  name="mobile"
+                  value={formData.mobile}
+                  onChange={handleMobileChange}
+                  required
+                  className="flex-1 p-2 border-0 outline-none w-full"
+                />
+              </div>
+            </FormField>
+            <FormField label="Location">
+              <select
+                name="location"
+                value={formData.location}
+                onChange={handleChange}
+                required
+                className={inputStyles}
+              >
+                <option value="">Select Location</option>
+                {locations.map((loc) => (
+                  <option key={loc.slug} value={loc.slug}>
+                    {loc.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="Assign Excel File">
+              <select
+                name="excelFile"
+                value={formData.excelFile}
+                onChange={handleChange}
+                disabled={!formData.location || files.length === 0}
+                className={`${inputStyles} disabled:bg-gray-100`}
+              >
+                <option value="">
+                  {!formData.location ? "Select location first" : "Select file"}
                 </option>
-              ))}
-            </select>
-            <select
-              name="excelFile"
-              value={formData.excelFile}
-              onChange={handleChange}
-              disabled={!formData.location}
-              required
-              className="p-2 border rounded"
-            >
-              <option value="">
-                {!formData.location
-                  ? "Select a location first"
-                  : "Assign Excel File"}
-              </option>
-              {files.map((file) => (
-                <option key={file.id} value={file.name}>
-                  {file.name}
-                </option>
-              ))}
-            </select>
+                {files.map((file) => (
+                  <option key={file.id} value={file.name}>
+                    {file.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
           </div>
-          {error && <p className="text-red-500">{error}</p>}
-          <div className="flex justify-end space-x-4 mt-6">
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
               onClick={closeModal}
-              className="px-4 py-2 bg-gray-200 rounded"
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-indigo-600 text-white rounded disabled:bg-indigo-300"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md flex items-center justify-center disabled:bg-blue-300 w-36"
             >
               {loading ? <Loader2 className="animate-spin" /> : "Save Changes"}
             </button>
@@ -578,49 +616,44 @@ const EditUserModal = ({ user, closeModal, onUserUpdated }) => {
 // --- Delete User Modal Component ---
 const DeleteUserModal = ({ user, closeModal, onUserDeleted }) => {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   const handleDelete = async () => {
     setLoading(true);
-    setError("");
     try {
       await apiClient.delete(`/users/${user.id}`);
       toast.success("User deleted successfully!");
       onUserDeleted();
       closeModal();
     } catch (err) {
-      // setError(err.response?.data?.message || "Failed to delete user.");
       toast.error(err.response?.data?.message || "Failed to delete user.");
-    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-4">Delete User</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+        <h2 className="text-2xl font-bold mb-4 text-gray-800">Delete User</h2>
         <p className="text-gray-600 mb-6">
           Are you sure you want to permanently delete the user{" "}
-          <span className="font-bold">
+          <span className="font-semibold text-gray-900">
             {user.name} ({user.username})
           </span>
           ? This action cannot be undone.
         </p>
-        {error && <p className="text-red-500 mb-4">{error}</p>}
-        <div className="flex justify-end space-x-4">
+        <div className="flex justify-end space-x-3">
           <button
             onClick={closeModal}
-            className="px-4 py-2 bg-gray-200 rounded"
+            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
           >
             Cancel
           </button>
           <button
             onClick={handleDelete}
             disabled={loading}
-            className="px-4 py-2 bg-red-600 text-white rounded disabled:bg-red-300"
+            className="px-4 py-2 bg-red-600 text-white rounded-md flex items-center justify-center disabled:bg-red-300 w-32"
           >
-            {loading ? <Loader2 className="animate-spin" /> : "Delete User"}
+            {loading ? <Loader2 className="animate-spin" /> : "Delete"}
           </button>
         </div>
       </div>

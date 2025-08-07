@@ -842,9 +842,19 @@ export async function resetAllCountersInDB(): Promise<void> {
   await db.ref().update(updates);
 }
 
-// Gathers all the statistics needed for the admin dashboard.
+// Define an interface for the function's return type for type safety
+interface DashboardSummary {
+  totalExcelRecords: number;
+  completedRecords: number;
+  pendingRecords: number;
+  registeredUsers: number;
+  activeBundles: number;
+  pdfsRequired: number;
+  recordsProcessedByDate: { date: string; count: number }[];
+  recordsByLocation: { name: string; value: number }[]; // Added this line
+}
 
-export async function getDashboardSummaryFromDB() {
+export async function getDashboardSummaryFromDB(): Promise<DashboardSummary> {
   const db = admin.database();
 
   const [
@@ -875,11 +885,13 @@ export async function getDashboardSummaryFromDB() {
 
   let completedRecords = 0;
   let pdfsRequired = 0;
+  const dailyCounts: Record<string, number> = {};
+
+  // --- NEW: Object to hold counts for each location ---
+  const locationCounts: Record<string, number> = {};
 
   if (processedRecordsSnapshot.exists()) {
     const recordsData = processedRecordsSnapshot.val();
-    let checkedOneRecord = false; // To prevent flooding the console
-
     for (const location in recordsData) {
       for (const taluka in recordsData[location]) {
         for (const bundle in recordsData[location][taluka]) {
@@ -889,22 +901,20 @@ export async function getDashboardSummaryFromDB() {
             if (record && typeof record === "object") {
               completedRecords++;
 
+              // --- NEW: Increment the count for the current location ---
+              locationCounts[location] = (locationCounts[location] || 0) + 1;
+
+              if (
+                record.processedAt &&
+                typeof record.processedAt === "string"
+              ) {
+                const date = record.processedAt.split("T")[0];
+                dailyCounts[date] = (dailyCounts[date] || 0) + 1;
+              }
+
               const pdfKey = Object.keys(record).find(
                 (k) => k.trim().toLowerCase() === "pdf required"
               );
-
-              // --- START DEBUGGING LOG ---
-              // This will print the key and value for the first record that has the key.
-              if (pdfKey && !checkedOneRecord) {
-                console.log(`[DEBUG] Found key: '${pdfKey}'`);
-                console.log(`[DEBUG] Value is: '${record[pdfKey]}'`);
-                console.log(
-                  `[DEBUG] Type of value is: ${typeof record[pdfKey]}`
-                );
-                checkedOneRecord = true;
-              }
-              // --- END DEBUGGING LOG ---
-
               if (
                 pdfKey &&
                 typeof record[pdfKey] === "string" &&
@@ -918,6 +928,20 @@ export async function getDashboardSummaryFromDB() {
       }
     }
   }
+
+  const recordsProcessedByDate = Object.keys(dailyCounts)
+    .map((date) => ({
+      date: date,
+      count: dailyCounts[date]!,
+    }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // --- NEW: Format the locationCounts object for the frontend chart ---
+  const recordsByLocation = Object.keys(locationCounts).map((locationSlug) => ({
+    // Capitalize the first letter for a nice display name, e.g., "ahilyanagar" -> "Ahilyanagar"
+    name: locationSlug.charAt(0).toUpperCase() + locationSlug.slice(1),
+    value: locationCounts[locationSlug]!,
+  }));
 
   let activeBundles = 0;
   if (activeBundlesSnapshot.exists()) {
@@ -936,6 +960,8 @@ export async function getDashboardSummaryFromDB() {
     registeredUsers,
     activeBundles,
     pdfsRequired,
+    recordsProcessedByDate,
+    recordsByLocation, // <-- Added the final data here
   };
 }
 
