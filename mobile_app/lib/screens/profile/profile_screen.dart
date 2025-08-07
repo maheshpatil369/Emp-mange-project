@@ -171,50 +171,150 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
+
                   onPressed: () async {
-                    // Show loading indicator
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (context) => const Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                    );
+  // Show confirmation dialog
+  final shouldLogout = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('First go to "Sync to Server" and then logout to avoid data loss...'),
+      content: const Text('Do you really want to logout?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('No'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Yes'),
+        ),
+      ],
+    ),
+  );
 
-                    try {
-                      // Get DataProvider to save current state before clearing
-                      final dataProvider =
-                          Provider.of<DataProvider>(context, listen: false);
+  if (shouldLogout != true) return; // User cancelled logout
 
-                      // CRITICAL: Save current bundles AND records state to SharedPreferences BEFORE clearing
-                      await dataProvider.saveDataBeforeLogout();
+  // Get DataProvider to check for unsynced records
+  final dataProvider = Provider.of<DataProvider>(context, listen: false);
 
-                      // Clear cached district data
-                      await _ProfileScreenState.clearCachedDistrict();
+  final hasUnsynced = await dataProvider.hasUnsyncedRecords;
+  if (hasUnsynced) {
+    // Show popup that prevents logout
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cannot Logout'),
+        content: const Text(
+          'You have unsynced records in temporary storage. Please sync all records to server before logging out.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    return; // Prevent logout
+  }
 
-                      // Then clear only runtime data (not SharedPreferences)
-                      await dataProvider.clearRuntimeUserData();
+  // Show loading indicator
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const Center(
+      child: CircularProgressIndicator(),
+    ),
+  );
 
-                      // Then sign out from auth
-                      await authProvider.signOut();
+  try {
+    await dataProvider.saveDataBeforeLogout();
+    await _ProfileScreenState.clearCachedDistrict();
+    await dataProvider.clearRuntimeUserData();
+    await authProvider.signOut();
+    Navigator.of(context).pop(); // Close loader
+    Navigator.of(context).pushReplacementNamed('/login');
+  } catch (e) {
+    Navigator.of(context).pop(); // Close loader
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Logout error: $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+},
 
-                      // Close loading dialog
-                      Navigator.of(context).pop();
 
-                      Navigator.of(context).pushReplacementNamed('/login');
-                    } catch (e) {
-                      // Close loading dialog
-                      Navigator.of(context).pop();
 
-                      // Show error
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Logout error: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  },
+
+                  // onPressed: () async {
+                  //   // Get DataProvider to check for unsynced records
+                  //   final dataProvider =
+                  //       Provider.of<DataProvider>(context, listen: false);
+
+                  //   // Check if there are unsynced records
+                  //   final hasUnsynced = await dataProvider.hasUnsyncedRecords;
+                    
+                  //   if (hasUnsynced) {
+                  //     // Show popup that prevents logout
+                  //     showDialog(
+                  //       context: context,
+                  //       builder: (context) => AlertDialog(
+                  //         title: const Text('Cannot Logout'),
+                  //         content: const Text(
+                  //           'You have unsynced records in temporary storage. Please sync all records to server before logging out.'
+                  //         ),
+                  //         actions: [
+                  //           TextButton(
+                  //             onPressed: () => Navigator.of(context).pop(),
+                  //             child: const Text('OK'),
+                  //           ),
+                  //         ],
+                  //       ),
+                  //     );
+                  //     return; // Prevent logout
+                  //   }
+
+                  //   // Show loading indicator
+                  //   showDialog(
+                  //     context: context,
+                  //     barrierDismissible: false,
+                  //     builder: (context) => const Center(
+                  //       child: CircularProgressIndicator(),
+                  //     ),
+                  //   );
+
+                  //   try {
+                  //     // CRITICAL: Save current bundles AND records state to SharedPreferences BEFORE clearing
+                  //     await dataProvider.saveDataBeforeLogout();
+
+                  //     // Clear cached district data
+                  //     await _ProfileScreenState.clearCachedDistrict();
+
+                  //     // Then clear only runtime data (not SharedPreferences)
+                  //     await dataProvider.clearRuntimeUserData();
+
+                  //     // Then sign out from auth
+                  //     await authProvider.signOut();
+
+                  //     // Close loading dialog
+                  //     Navigator.of(context).pop();
+
+                  //     Navigator.of(context).pushReplacementNamed('/login');
+                  //   } catch (e) {
+                  //     // Close loading dialog
+                  //     Navigator.of(context).pop();
+
+                  //     // Show error
+                  //     ScaffoldMessenger.of(context).showSnackBar(
+                  //       SnackBar(
+                  //         content: Text('Logout error: $e'),
+                  //         backgroundColor: Colors.red,
+                  //       ),
+                  //     );
+                  //   }
+                  // },
                   icon: const Icon(Icons.logout),
                   label: const Text('Logout'),
                   style: ElevatedButton.styleFrom(

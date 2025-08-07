@@ -29,6 +29,7 @@ class ApiService {
         final prefs = await SharedPreferences.getInstance();
         final user = responseBody['user']['displayName'];
         final userEmail = responseBody['user']['email'];
+        print("Access Token: $token"); // DEBUG: Print access token
         print("Refresh Token: $refreshToken"); // DEBUG: Print refresh token
 
         // Save both tokens with timestamp
@@ -352,6 +353,26 @@ class ApiService {
       }
     } catch (e) {
       print('Exception during getUserLocation: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> getUserInfo() async {
+    try {
+      final response = await _makeAuthenticatedRequest((headers) async {
+        return await http.get(
+          Uri.parse('$_baseUrl/users/me'),
+          headers: headers,
+        );
+      });
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        throw Exception('Failed to fetch user info: ${response.body}');
+      }
+    } catch (e) {
+      print('Exception during getUserInfo: $e');
       rethrow;
     }
   }

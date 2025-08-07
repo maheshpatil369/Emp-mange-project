@@ -28,6 +28,7 @@ class _DataScreenState extends State<DataScreen> {
   bool _isSyncCooldown = false; // Add cooldown state for sync button
   int _syncCooldownSeconds = 0; // Track remaining cooldown seconds
   Timer? _syncCooldownTimer; // Timer for sync cooldown
+  Set<String> _savedRecordIds = {}; // Track saved records in this session
 
   @override
   void initState() {
@@ -98,6 +99,14 @@ class _DataScreenState extends State<DataScreen> {
     return _tempRecords.every((tempRecord) =>
         tempRecord['UniqueId'] != record['UniqueId'] &&
         tempRecord['Search from'] != record['Search from']);
+  }
+
+  // Check if record has already been saved in this session
+  bool _isRecordAlreadySaved(Map<String, dynamic>? record) {
+    if (record == null) return false;
+    final uniqueId = record['UniqueId']?.toString();
+    if (uniqueId == null) return false;
+    return _savedRecordIds.contains(uniqueId);
   }
 
   // Method to fetch and print active bundles
@@ -1191,14 +1200,19 @@ class _DataScreenState extends State<DataScreen> {
         Expanded(
           child: ElevatedButton.icon(
             icon: const Icon(Icons.save),
-            label: const Text('Save Record'),
+            label: Text(_isRecordAlreadySaved(_selectedRecord)
+                ? 'Already Saved'
+                : 'Save Record'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: _isRecordAlreadySaved(_selectedRecord)
+                  ? Colors.grey
+                  : Colors.green,
               foregroundColor: Colors.white,
             ),
             onPressed: (_selectedRecord != null &&
                     _hasUniqueId(_selectedRecord!) &&
-                    _isNotInTempRecords(_selectedRecord!))
+                    _isNotInTempRecords(_selectedRecord!) &&
+                    !_isRecordAlreadySaved(_selectedRecord))
                 ? () async {
                     try {
                       final provider =
@@ -1239,6 +1253,13 @@ class _DataScreenState extends State<DataScreen> {
                           await provider.saveRecordToSync(_selectedRecord!);
 
                       if (success) {
+                        // Add record ID to saved set to prevent duplicate saves
+                        final uniqueId =
+                            _selectedRecord!['UniqueId']?.toString();
+                        if (uniqueId != null) {
+                          _savedRecordIds.add(uniqueId);
+                        }
+
                         // Only increment bundle count if save was successful and not a duplicate
                         await provider.incrementBundleCount(taluka);
                         await _loadTempRecords(); // Refresh temp records list
