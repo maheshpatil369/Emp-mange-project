@@ -561,34 +561,20 @@ class DataProvider with ChangeNotifier {
   };
 
 Future<void> completeBundleForTaluka(String taluka) async {
-  try {
-    // Get the authorization headers
-    final headers = await _getHeaders();
+    try {
+      // 1. Simply call the ApiService. Let it handle the details.
+      await _apiService.completeBundleForTaluka(taluka);
 
-    final response = await http.post(
-      Uri.parse('$_baseUrl/data/bundles/complete'),
-      headers: headers,
-      body: json.encode({'taluka': taluka}),
-    );
+      // 2. Refresh the local data after the API call is successful
+      await refreshLocalBundles();
+      print('Successfully completed bundle for $taluka and refreshed local data.');
 
-    if (response.statusCode == 401) {
-      throw Exception('Unauthorized: Please check your token or log in again.');
+    } catch (e) {
+      print('Error in DataProvider during completeBundle: $e');
+      // Optionally, show an error message to the user here
+      rethrow;
     }
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to mark bundle as complete. Status code: ${response.statusCode}');
-    }
-
-    // Update local bundle status
-    await refreshLocalBundles();
-    print('Bundle for taluka $taluka marked as complete successfully.');
-
-  } catch (e) {
-    print('Error completing bundle: $e');
-    rethrow;
   }
-}
-
 // 1. First, let's add a method to get the highest sequence number for a taluka
   Future<int> _getHighestSequenceNumberForTaluka(String taluka) async {
     try {

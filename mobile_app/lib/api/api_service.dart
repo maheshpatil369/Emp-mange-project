@@ -156,6 +156,31 @@ class ApiService {
     };
   }
 
+Future<void> completeBundleForTaluka(String taluka) async {
+    // 1. Get the headers using its OWN private helper method
+    final headers = await _getHeaders();
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/data/bundles/complete'),
+        // 2. Add the headers to the request
+        headers: headers,
+        // 3. Encode the body as JSON
+        body: json.encode({'taluka': taluka}),
+      );
+
+      if (response.statusCode == 401) {
+        throw Exception('Unauthorized: Token might be invalid. Please log in again.');
+      }
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to mark bundle as complete. Server responded with ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error in ApiService during completeBundleForTaluka: $e');
+      rethrow; // Pass the error up
+    }
+  }
   // Enhanced method to make authenticated API calls with automatic retry on token expiry
   Future<http.Response> _makeAuthenticatedRequest(
     Future<http.Response> Function(Map<String, String> headers) requestFunction,
