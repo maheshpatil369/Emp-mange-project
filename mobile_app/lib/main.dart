@@ -77,17 +77,32 @@
 //     );
 //   }
 // }
+
+
+
+
+
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
-import 'package:mobile_app/providers/auth_provider.dart';
-import 'package:mobile_app/providers/data_provider.dart';
-import 'package:mobile_app/services/connectivity_service.dart';
-import 'package:mobile_app/screens/auth/login_screen.dart';
-import 'package:mobile_app/screens/main_navigation_screen.dart';
-import 'package:mobile_app/screens/profile/profile_screen.dart';
-import 'package:mobile_app/screens/data_management/data_screen.dart';
+// import 'package:mobile_app/providers/auth_provider.dart';
+// import 'package:mobile_app/providers/data_provider.dart';
+// import 'package:mobile_app/services/connectivity_service.dart';
+// import 'package:mobile_app/screens/auth/login_screen.dart';
+// import 'package:mobile_app/screens/main_navigation_screen.dart';
+// import 'package:mobile_app/screens/profile/profile_screen.dart';
+// import 'package:mobile_app/screens/data_management/data_screen.dart';
+
+
+import 'package:Surecheck/providers/auth_provider.dart';
+import 'package:Surecheck/providers/data_provider.dart';
+import 'package:Surecheck/services/connectivity_service.dart';
+import 'package:Surecheck/screens/auth/login_screen.dart';
+import 'package:Surecheck/screens/main_navigation_screen.dart';
+import 'package:Surecheck/screens/profile/profile_screen.dart';
+import 'package:Surecheck/screens/data_management/data_screen.dart';
+
 
 // Conditional import for sqflite_common_ffi_web
 import 'package:flutter/foundation.dart' show kIsWeb;
