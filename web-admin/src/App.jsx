@@ -1,9 +1,9 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { HashRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./services/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./components/Login";
-import MainLayout from "./components/MainLayout"; 
-import DashboardPage from "./components/Dashboard"; 
+import MainLayout from "./components/MainLayout";
+import DashboardPage from "./components/Dashboard";
 import UsersManagement from "./components/UsersManagement";
 import {
   DataManagementHub,
@@ -20,7 +20,7 @@ function App() {
     <AuthProvider>
       <Router>
         <Toaster position="top-right" reverseOrder={false} />
-        
+
         <Routes>
           <Route path="/login" element={<Login />} />
 
