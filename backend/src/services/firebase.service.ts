@@ -298,6 +298,153 @@ function generateIdPrefix(location: string, taluka: string): string {
  * @param sourceFile - The name of the original file the data came from.
  */
 
+// export async function saveProcessedRecordsToDB(
+//   userId: string,
+//   location: string,
+//   taluka: string,
+//   bundleNo: number,
+//   records: any[],
+//   sourceFile: string
+// ): Promise<void> {
+//   const db = admin.database();
+
+//   // --- VALIDATION CHECKS ---
+//   if (records.length > 250) {
+//     throw new Error("Cannot sync more than 250 records at a time.");
+//   }
+
+//   // const recordsRef = db.ref(
+//   //   `processedRecords/${location}/${taluka}/bundle-${bundleNo}`
+//   // );
+
+//   // const snapshot = await recordsRef.once("value");
+//   // let currentRecordCount = 0;
+//   // if (snapshot.exists()) {
+//   //   const bundleData = snapshot.val();
+//   //   for (const key in bundleData) {
+//   //     if (bundleData[key] && typeof bundleData[key] === "object") {
+//   //       currentRecordCount++;
+//   //     }
+//   //   }
+//   // }
+
+//   // if (currentRecordCount >= 250) {
+//   //   throw new Error(`Bundle #${bundleNo} is already full and cannot accept new records.`);
+//   // }
+
+//   // const remainingCapacity = 250 - currentRecordCount;
+//   // if (records.length > remainingCapacity) {
+//   //   throw new Error(
+//   //     `Cannot add ${records.length} records. Bundle #${bundleNo} only has capacity for ${remainingCapacity} more records.`
+//   //   );
+//   // }
+
+//   const idCounterRef = db.ref(`idCounters/${location}/${taluka}`);
+//   const updates: { [key: string]: any } = {};
+//   let newRecordsCount = 0;
+//   const seenInThisBatch = new Set();
+//   const duplicateRecordsToSave: any[] = [];
+
+//   for (const record of records) {
+//     const intimationNoKey = Object.keys(record).find(
+//       (k) => k.trim().toLowerCase() === "intimation no"
+//     );
+//     const intimationNo = intimationNoKey ? record[intimationNoKey] : null;
+
+//     if (intimationNo) {
+//       // Check for duplicates within the current batch
+//       if (seenInThisBatch.has(intimationNo)) {
+//         logger.warn(`Duplicate within batch for Intimation No: ${intimationNo}.`);
+//         duplicateRecordsToSave.push({ ...record, reason: "Duplicate within same batch" });
+//         continue;
+//       }
+
+//       // Check for duplicates against the database index
+//       const indexRef = db.ref(`/intimationNoIndex/${intimationNo}`);
+//       const snapshot = await indexRef.once("value");
+
+//       if (snapshot.exists()) {
+//         logger.warn(`Duplicate in DB for Intimation No: ${intimationNo}.`);
+//         const originalRecordId = snapshot.val();
+//         duplicateRecordsToSave.push({ ...record, reason: `Duplicate of existing record: ${originalRecordId}` });
+//         continue;
+//       }
+//     }
+
+//     // If we reach here, the record is unique
+//     if (intimationNo) {
+//       seenInThisBatch.add(intimationNo);
+//     }
+
+//     // Generate a unique ID for the new record
+//     const { snapshot: idSnapshot } = await idCounterRef.transaction(
+//       (currentData: { lastId: number } | null) => {
+//         if (currentData === null) { return { lastId: 1 }; }
+//         currentData.lastId++;
+//         return currentData;
+//       }
+//     );
+
+//     const newId = idSnapshot.val().lastId;
+//     const prefix = generateIdPrefix(location, taluka);
+//     const uniqueId = `${prefix}${newId}`;
+
+//     // Prepare the new record to be saved
+//     const newRecord: ProcessedRecord = {
+//       ...record,
+//       uniqueId: uniqueId,
+//       bundleNo: bundleNo,
+//       processedBy: userId,
+//       processedAt: new Date().toISOString(),
+//       sourceFile: sourceFile,
+//       taluka: taluka,
+//     };
+
+//     // Add the new record and its index entry to the updates object
+//     const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}/${uniqueId}`;
+//     updates[recordPath] = newRecord;
+
+//     if (intimationNo) {
+//       const indexPath = `/intimationNoIndex/${intimationNo}`;
+//       updates[indexPath] = uniqueId; // Store the uniqueId in the index
+//     }
+
+//     newRecordsCount++;
+//   }
+
+//   // Process and prepare any found duplicates for saving
+//   if (duplicateRecordsToSave.length > 0) {
+//     const duplicatesRef = db.ref(`/duplicateRecords/${location}/${taluka}`);
+//     duplicateRecordsToSave.forEach(dup => {
+//       const newDuplicateKey = duplicatesRef.push().key;
+//       const duplicateData = {
+//         ...dup, // The full original data of the duplicate record
+//         submittedBy: userId,
+//         submittedAt: new Date().toISOString(),
+//         sourceBundleNo: bundleNo,
+//       };
+//       updates[`/duplicateRecords/${location}/${taluka}/${newDuplicateKey}`] = duplicateData;
+//     });
+//   }
+
+//   // Atomically save all unique records, index entries, and duplicate records
+//   if (Object.keys(updates).length > 0) {
+//     await db.ref().update(updates);
+//   }
+
+//   // If new unique records were saved, increment the user's active bundle count
+//   if (newRecordsCount > 0) {
+//     const userStateCountRef = db.ref(
+//       `userStates/${userId}/activeBundles/${taluka}/count`
+//     );
+//     await userStateCountRef.set(
+//       admin.database.ServerValue.increment(newRecordsCount)
+//     );
+//   } else {
+//     logger.info("No new unique records to save in this batch.");
+//   }
+// }
+
 export async function saveProcessedRecordsToDB(
   userId: string,
   location: string,
@@ -311,32 +458,6 @@ export async function saveProcessedRecordsToDB(
   // --- VALIDATION CHECKS ---
   if (records.length > 250) {
     throw new Error("Cannot sync more than 250 records at a time.");
-  }
-
-  const recordsRef = db.ref(
-    `processedRecords/${location}/${taluka}/bundle-${bundleNo}`
-  );
-
-  const snapshot = await recordsRef.once("value");
-  let currentRecordCount = 0;
-  if (snapshot.exists()) {
-    const bundleData = snapshot.val();
-    for (const key in bundleData) {
-      if (bundleData[key] && typeof bundleData[key] === "object") {
-        currentRecordCount++;
-      }
-    }
-  }
-
-  if (currentRecordCount >= 250) {
-    throw new Error(`Bundle #${bundleNo} is already full and cannot accept new records.`);
-  }
-
-  const remainingCapacity = 250 - currentRecordCount;
-  if (records.length > remainingCapacity) {
-    throw new Error(
-      `Cannot add ${records.length} records. Bundle #${bundleNo} only has capacity for ${remainingCapacity} more records.`
-    );
   }
 
   const idCounterRef = db.ref(`idCounters/${location}/${taluka}`);
@@ -356,7 +477,7 @@ export async function saveProcessedRecordsToDB(
       if (seenInThisBatch.has(intimationNo)) {
         logger.warn(`Duplicate within batch for Intimation No: ${intimationNo}.`);
         duplicateRecordsToSave.push({ ...record, reason: "Duplicate within same batch" });
-        continue;
+        // continue; // <-- REMOVED: By removing 'continue', the record will still be processed normally.
       }
 
       // Check for duplicates against the database index
@@ -367,11 +488,11 @@ export async function saveProcessedRecordsToDB(
         logger.warn(`Duplicate in DB for Intimation No: ${intimationNo}.`);
         const originalRecordId = snapshot.val();
         duplicateRecordsToSave.push({ ...record, reason: `Duplicate of existing record: ${originalRecordId}` });
-        continue;
+        // continue; // <-- REMOVED: By removing 'continue', the record will still be processed normally.
       }
     }
 
-    // If we reach here, the record is unique
+    // If we reach here, the record is unique (or we are intentionally allowing duplicates)
     if (intimationNo) {
       seenInThisBatch.add(intimationNo);
     }
@@ -384,6 +505,7 @@ export async function saveProcessedRecordsToDB(
         return currentData;
       }
     );
+    
     const newId = idSnapshot.val().lastId;
     const prefix = generateIdPrefix(location, taluka);
     const uniqueId = `${prefix}${newId}`;
@@ -412,6 +534,7 @@ export async function saveProcessedRecordsToDB(
   }
 
   // Process and prepare any found duplicates for saving
+  // This block now runs alongside saving all records to the main path.
   if (duplicateRecordsToSave.length > 0) {
     const duplicatesRef = db.ref(`/duplicateRecords/${location}/${taluka}`);
     duplicateRecordsToSave.forEach(dup => {
@@ -426,12 +549,13 @@ export async function saveProcessedRecordsToDB(
     });
   }
 
-  // Atomically save all unique records, index entries, and duplicate records
+  // Atomically save all records (including duplicates) to processedRecords,
+  // their index entries, AND the separate duplicate records path.
   if (Object.keys(updates).length > 0) {
     await db.ref().update(updates);
   }
 
-  // If new unique records were saved, increment the user's active bundle count
+  // If new records were saved, increment the user's active bundle count
   if (newRecordsCount > 0) {
     const userStateCountRef = db.ref(
       `userStates/${userId}/activeBundles/${taluka}/count`
@@ -440,7 +564,7 @@ export async function saveProcessedRecordsToDB(
       admin.database.ServerValue.increment(newRecordsCount)
     );
   } else {
-    logger.info("No new unique records to save in this batch.");
+    logger.info("No new records to save in this batch.");
   }
 }
 
