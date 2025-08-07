@@ -560,24 +560,34 @@ class DataProvider with ChangeNotifier {
     'Soegaon': 'chhatrapati-sambhajinagar',
   };
 
-  Future<void> completeBundleForTaluka(String taluka) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/data/bundles/complete'),
-        body: {'taluka': taluka},
-      );
+Future<void> completeBundleForTaluka(String taluka) async {
+  try {
+    // Get the authorization headers
+    final headers = await _getHeaders();
 
-      if (response.statusCode != 200) {
-        throw Exception('Failed to mark bundle as complete');
-      }
+    final response = await http.post(
+      Uri.parse('$_baseUrl/data/bundles/complete'),
+      headers: headers,
+      body: json.encode({'taluka': taluka}),
+    );
 
-      // Update local bundle status
-      await refreshLocalBundles();
-    } catch (e) {
-      print('Error completing bundle: $e');
-      rethrow;
+    if (response.statusCode == 401) {
+      throw Exception('Unauthorized: Please check your token or log in again.');
     }
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to mark bundle as complete. Status code: ${response.statusCode}');
+    }
+
+    // Update local bundle status
+    await refreshLocalBundles();
+    print('Bundle for taluka $taluka marked as complete successfully.');
+
+  } catch (e) {
+    print('Error completing bundle: $e');
+    rethrow;
   }
+}
 
 // 1. First, let's add a method to get the highest sequence number for a taluka
   Future<int> _getHighestSequenceNumberForTaluka(String taluka) async {
