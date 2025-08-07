@@ -59,6 +59,7 @@ class DataProvider with ChangeNotifier {
   bool _isLoadingConfig = false;
   bool _isAssigningBundle = false;
   String? _errorMessage;
+  String? _userExcelFile; // Cache user's excel file
   String? get errorMessage => _errorMessage;
 
   final List<Member> _records = [];
@@ -927,10 +928,11 @@ class DataProvider with ChangeNotifier {
 
         if (bundleResult.isNotEmpty) {
           final bundle = bundleResult.first;
+          final sourceFile = await _getUserExcelFile(); // Get user's excel file
           final syncData = {
             'taluka': taluka,
             'bundleNo': bundle['bundleNo'],
-            'sourceFile': 'mobile_app_processed',
+            'sourceFile': sourceFile,
             'records': talukaRecords,
           };
 
@@ -972,6 +974,25 @@ class DataProvider with ChangeNotifier {
   Future<String?> _getCurrentUserEmail() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('email');
+  }
+
+  // Get user's excel file from API and cache it
+  Future<String> _getUserExcelFile() async {
+    try {
+      if (_userExcelFile != null) {
+        return _userExcelFile!; // Return cached value
+      }
+
+      final userInfo = await _apiService.getUserInfo();
+      _userExcelFile =
+          userInfo['excelFile']?.toString() ?? 'mobile_app_processed';
+
+      print('Fetched user excel file: $_userExcelFile');
+      return _userExcelFile!;
+    } catch (e) {
+      print('Error fetching user excel file: $e');
+      return 'mobile_app_processed'; // Fallback to default
+    }
   }
 
   // Save active bundles to SharedPreferences (user-specific)
@@ -1162,6 +1183,9 @@ class DataProvider with ChangeNotifier {
       // Clear temporary sync records
       await emptyTempTable();
 
+      // Clear cached user excel file
+      _userExcelFile = null;
+
       // Optionally clear old records from SharedPreferences if not preserving
       if (!preserveRecordsInPrefs) {
         await clearOldRecordsFromPrefs();
@@ -1196,6 +1220,9 @@ class DataProvider with ChangeNotifier {
 
       // Clear temporary sync records
       await emptyTempTable();
+
+      // Clear cached user excel file
+      _userExcelFile = null;
 
       // Clear SharedPreferences only if not preserving them
       if (!preserveSharedPrefs && userEmail != null) {
