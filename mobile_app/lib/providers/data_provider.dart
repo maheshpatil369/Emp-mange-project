@@ -832,6 +832,7 @@ Future<void> fetchAndSyncBundles() async {
 static const Map<String, String> _talukaAbbreviations = {
     // Ahilyanagar talukas
     'Jamkhed': 'JA',
+    'Ahilyanagar': 'AH',
     'Karjat': 'KA',
     'Kopargaon': 'KO',
     'Nevasa': 'NE',
