@@ -794,12 +794,12 @@ const AdminTools = ({ users, config }) => {
         >
           <ManualAssignForm users={users} config={config} />
         </AdminTool>
-        <AdminTool
+        {/* <AdminTool
           title="Reset User Progress"
           description="Clear all processed data and reset bundle progress for a user."
         >
           <ResetProgressForm users={users} config={config} />
-        </AdminTool>
+        </AdminTool> */}
       </div>
     </ManagementCard>
   );
