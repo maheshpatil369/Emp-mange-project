@@ -179,7 +179,6 @@ export const LocationFileManagement = () => {
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-
   const fetchFiles = async () => {
     setLoading(true);
     try {
@@ -224,7 +223,6 @@ export const LocationFileManagement = () => {
       toast.error(err.response?.data?.message || "Failed to delete file.");
     }
   };
-
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
@@ -1037,6 +1035,7 @@ const ManualAssignForm = ({ users, config }) => {
     } else {
       setTalukas([]);
     }
+    // Reset taluka when user changes
     setFormData((prev) => ({ ...prev, taluka: "" }));
   }, [formData.userId, config, users]);
 
@@ -1050,7 +1049,25 @@ const ManualAssignForm = ({ users, config }) => {
       return;
     setLoading(true);
     try {
-      await apiClient.post("/admin/manual-assign", formData);
+      // 1. Find the selected user to get their location.
+      const selectedUser = users.find((u) => u.id === formData.userId);
+      if (!selectedUser) {
+        toast.error("Could not find the selected user's details.");
+        setLoading(false);
+        return;
+      }
+
+      // 2. Create the complete payload, including the location.
+      const payload = {
+        userId: formData.userId,
+        taluka: formData.taluka,
+        bundleNo: Number(formData.bundleNo),
+        location: selectedUser.location, // Add the required location field
+      };
+
+      // 3. Send the updated payload to the API.
+      await apiClient.post("/admin/manual-assign", payload);
+
       toast.success("Bundle assigned successfully!");
       setFormData({ userId: "", taluka: "", bundleNo: "" });
     } catch (err) {
