@@ -1047,7 +1047,7 @@ class _DataScreenState extends State<DataScreen> {
   //   );
   // }
 
-  Widget _buildRecordDetails() {
+ Widget _buildRecordDetails() {
     final record = _selectedRecord!;
     final fields = [
       {'label': 'Farmer Name', 'key': 'Farmer Name'},
@@ -1059,6 +1059,16 @@ class _DataScreenState extends State<DataScreen> {
       {'label': 'Search from', 'key': 'Search from'},
       {'label': 'Taluka', 'key': 'Taluka'},
     ];
+
+    // Conditionally add fields based on 'PDf Required' value
+    if (record['PDf Required']?.toString().toLowerCase() == 'yes') {
+      fields.addAll([
+        {'label': 'Affected Area', 'key': 'Affrected Area'},
+        {'label': 'Insured Area', 'key': 'Insured Area'},
+        {'label': 'Loss Percentage', 'key': 'Loss Percetage'},
+        {'label': 'Survey Date', 'key': 'Survey Date'},
+      ]);
+    }
 
     return Column(
       children: fields.map((field) {
@@ -1140,7 +1150,6 @@ class _DataScreenState extends State<DataScreen> {
       }).toList(),
     );
   }
-
   Widget _buildActionButtons() {
     return Row(
       children: [

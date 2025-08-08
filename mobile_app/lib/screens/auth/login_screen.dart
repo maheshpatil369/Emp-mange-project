@@ -324,7 +324,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   // ✅ Show Admin Number when clicked
                   if (_showAdminNumber)
                     const Text(
-                      '+91 91305 06776',
+                      '+91 93704 06643',
                       style: TextStyle(
                           color: Colors.black87, fontWeight: FontWeight.bold),
                     ),
