@@ -35,7 +35,7 @@ function Login() {
 
     try {
       // Pass username instead of email
-      await login(username, password);
+      await login(username + "@gmail.com", password);
       navigate("/");
     } catch (err) {
       console.error("Login error:", err);
@@ -90,7 +90,7 @@ function Login() {
               htmlFor="username"
               className="block text-sm font-semibold text-gray-700"
             >
-              Email
+              Username
             </label>
             <div className="mt-1">
               <input
@@ -98,7 +98,7 @@ function Login() {
                 type="text" // Changed from email to text
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin@gmail.com"
+                placeholder="superadmin"
                 disabled={loading}
                 required
                 className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition"
