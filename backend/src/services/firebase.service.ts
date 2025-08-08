@@ -98,13 +98,13 @@ export async function saveContentBatchToDB(
   const contentRef = db.ref(`files/${location}/${fileId}/content`);
 
   // Get current content length to continue numbering
-  const snapshot = await contentRef.once('value');
+  const snapshot = await contentRef.once("value");
   const existingData = snapshot.val();
   let startIndex = 0;
 
   if (Array.isArray(existingData)) {
     startIndex = existingData.length;
-  } else if (existingData && typeof existingData === 'object') {
+  } else if (existingData && typeof existingData === "object") {
     startIndex = Object.keys(existingData).length;
   }
 
@@ -118,7 +118,6 @@ export async function saveContentBatchToDB(
     await contentRef.update(updates);
   }
 }
-
 
 /**
  * Fetches a single user's profile from the database.
@@ -189,97 +188,89 @@ export async function getFilesByLocationFromDB(
 }
 
 /**
- * Assigns a new work bundle to a user in a specific taluka.
- * This function uses a transaction to ensure atomicity and is now simplified.
- * @param userId - The UID of the user requesting a bundle.
- * @param location - The location slug for the assignment.
- * @param taluka - The taluka for which to assign a bundle.
+ * Gets a new, unassigned bundle number and assigns it to a user.
+ * UPDATED: Now double-checks against a central registry to avoid manual-assignment collisions.
+ * @param userId - The UID of the user.
+ * @param location - The location slug.
+ * @param taluka - The taluka slug.
  */
-
 export async function assignNewBundleToUser(
   userId: string,
   location: string,
   taluka: string
 ): Promise<ActiveBundle> {
-  try {
-    const db = admin.database();
-    const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
-    const bundleCounterRef = db.ref(`bundleCounters/${location}/${taluka}`);
+  const db = admin.database();
+  const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
+  const bundleCounterRef = db.ref(`bundleCounters/${location}/${taluka}`);
+  const assignedBundlesRef = db.ref(`assignedBundles/${location}/${taluka}`); // Central registry
+  const MAX_ATTEMPTS = 10; // Safety break
 
-    logger.info(
-      `Attempting to assign bundle for user ${userId} in ${location}/${taluka}`
-    );
+  const existingStateSnapshot = await userStateRef.once("value");
+  if (existingStateSnapshot.exists()) {
+    throw new Error(`User already has an active bundle for ${taluka}.`);
+  }
 
-    // First, check if the user already has an active bundle for this taluka.
-    const existingStateSnapshot = await userStateRef.once("value");
-    if (existingStateSnapshot.exists()) {
-      logger.warn(`User ${userId} already has an active bundle for ${taluka}`);
-      throw new Error(`User already has an active bundle for ${taluka}.`);
-    }
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    let assignedBundleNo: number | null = null;
 
-    let assignedBundleNo: number;
-
-    // Run a single, atomic transaction to safely get the next bundle number.
+    // Run transaction to get a potential number
     const { committed, snapshot } = await bundleCounterRef.transaction(
       (currentData: BundleCounter | null) => {
-        // If the counter doesn't exist for this taluka, initialize it.
         if (currentData === null) {
-          logger.info(`Initializing bundle counter for ${location}/${taluka}`);
-          assignedBundleNo = 1; // Assign the very first bundle
-          return { nextBundle: 2 }; // The next one to be assigned will be 2
+          return { nextBundle: 2, gaps: [] }; // Start with bundle 1
         }
-
-        // Check if there are recycled bundle numbers in the 'gaps' array.
         if (currentData.gaps && currentData.gaps.length > 0) {
-          currentData.gaps.sort((a, b) => a - b); // Ensure we take the smallest
-          assignedBundleNo = currentData.gaps.shift()!; // Take the first number from gaps
-          logger.debug(`Reusing bundle number from gaps: ${assignedBundleNo}`);
+          currentData.gaps.sort((a, b) => a - b);
+          assignedBundleNo = currentData.gaps.shift()!;
         } else {
-          // Otherwise, use the nextBundle number.
           assignedBundleNo = currentData.nextBundle || 1;
-          currentData.nextBundle = assignedBundleNo + 1;
-          logger.debug(
-            `Assigning next sequential bundle number: ${assignedBundleNo}`
-          );
+          currentData.nextBundle = (currentData.nextBundle || 1) + 1;
         }
-
-        return currentData; // Return the modified data to be saved by the transaction.
+        return currentData;
       }
     );
 
-    if (!committed) {
-      logger.error(
-        `Failed to commit transaction for user ${userId} in ${location}/${taluka}`
-      );
-      throw new Error(
-        "Failed to commit transaction to assign bundle number. Please try again."
-      );
+    if (!committed || assignedBundleNo === null) {
+      throw new Error("Failed to commit transaction to get bundle number.");
     }
 
-    // Now that the transaction is complete and we have the assigned number,
-    // create the new bundle state for the user.
+    // CRITICAL CHECK: See if the number we just got from the counter
+    // was already given out manually and is in our central registry.
+    const registrySnapshot = await assignedBundlesRef
+      .child(String(assignedBundleNo))
+      .once("value");
+    if (registrySnapshot.exists()) {
+      logger.warn(
+        `Counter provided bundle #${assignedBundleNo}, but it was already manually assigned. Retrying...`
+      );
+      continue; // Loop again to get the next number
+    }
+
+    // If we are here, the number is available. Let's assign it.
     const newBundle: ActiveBundle = {
-      bundleNo: assignedBundleNo!,
+      bundleNo: assignedBundleNo,
       count: 0,
       taluka: taluka,
     };
 
-    logger.info(
-      `Creating new bundle for user ${userId}: ${JSON.stringify(newBundle)}`
-    );
-    await userStateRef.set(newBundle);
+    // Prepare atomic update
+    const updates: { [key: string]: any } = {};
+    // 1. Set the user's active bundle
+    updates[`userStates/${userId}/activeBundles/${taluka}`] = newBundle;
+    // 2. Mark this bundle as taken in the central registry
+    updates[`assignedBundles/${location}/${taluka}/${assignedBundleNo}`] = true;
+
+    await db.ref().update(updates);
 
     logger.info(
-      `Successfully assigned bundle #${newBundle.bundleNo} to user ${userId} in ${taluka}`
+      `Successfully assigned bundle #${newBundle.bundleNo} to user ${userId}`
     );
-    return newBundle;
-  } catch (error) {
-    logger.error(
-      `Complete error in assignNewBundleToUser for user ${userId} in ${location}/${taluka}:`,
-      error
-    );
-    throw error; // Re-throw to allow caller to handle
+    return newBundle; // Success, exit the loop and function
   }
+
+  throw new Error(
+    `Failed to find an available bundle after ${MAX_ATTEMPTS} attempts.`
+  );
 }
 
 /**
@@ -513,7 +504,7 @@ export async function assignNewBundleToUser(
 //         return currentData;
 //       }
 //     );
-    
+
 //     const newId = idSnapshot.val().lastId;
 //     const prefix = generateIdPrefix(location, taluka);
 //     const uniqueId = `${prefix}${newId}`;
@@ -576,7 +567,6 @@ export async function assignNewBundleToUser(
 //   }
 // }
 
-
 interface ProcessedRecord {
   [key: string]: any; // Allows for dynamic keys from the source file
   bundleNo: number;
@@ -610,11 +600,15 @@ export async function saveProcessedRecordsToDB(
   const db = admin.database();
 
   // --- VALIDATE ACTIVE BUNDLE ---
-  const activeBundleRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
+  const activeBundleRef = db.ref(
+    `userStates/${userId}/activeBundles/${taluka}`
+  );
   const activeBundleSnapshot = await activeBundleRef.once("value");
 
   if (!activeBundleSnapshot.exists()) {
-    throw new Error(`User does not have an active bundle for taluka: ${taluka}.`);
+    throw new Error(
+      `User does not have an active bundle for taluka: ${taluka}.`
+    );
   }
   const activeBundleData = activeBundleSnapshot.val();
   if (Number(activeBundleData.bundleNo) !== Number(bundleNo)) {
@@ -629,46 +623,55 @@ export async function saveProcessedRecordsToDB(
   }
 
   const updates: { [key: string]: any } = {};
-  const duplicateRecordsToSave: any[] = [];
   const seenInThisBatch = new Set();
-  
+
   for (const record of records) {
+    // --- FIND UNIQUE ID ---
     const uniqueIdKey = Object.keys(record).find(
-      (k) => k.trim().toLowerCase().replace(/[\s_-]/g, '') === 'uniqueid'
+      (k) =>
+        k
+          .trim()
+          .toLowerCase()
+          .replace(/[\s_-]/g, "") === "uniqueid"
     );
 
     if (!uniqueIdKey || !record[uniqueIdKey]) {
-      logger.error("A record in the batch is missing its unique ID.", { record });
+      logger.error("A record in the batch is missing its unique ID.", {
+        record,
+      });
       throw new Error(`A record in the batch is missing its unique ID.`);
     }
     const uniqueId = record[uniqueIdKey];
-    
-    // --- DUPLICATE CHECKING LOGIC ---
+
+    // --- DUPLICATE CHECKING ---
+    let isDuplicate = false;
     const intimationNoKey = Object.keys(record).find(
       (k) => k.trim().toLowerCase() === "intimation no"
     );
-
     const intimationNo = intimationNoKey ? record[intimationNoKey] : null;
 
     if (intimationNo) {
-      // Check for duplicates within the current batch
+      // Within-batch duplicate
       if (seenInThisBatch.has(intimationNo)) {
-        logger.warn(`Duplicate within batch for Intimation No: ${intimationNo}.`);
-        duplicateRecordsToSave.push({ ...record, reason: "Duplicate within same batch" });
+        isDuplicate = true;
+        logger.warn(
+          `Duplicate within batch for Intimation No: ${intimationNo}.`
+        );
       }
 
-      // Check for duplicates against the database index
+      // DB duplicate check
       const indexRef = db.ref(`/intimationNoIndex/${intimationNo}`);
       const snapshot = await indexRef.once("value");
       if (snapshot.exists()) {
-        logger.warn(`Duplicate in DB for Intimation No: ${intimationNo}.`);
+        isDuplicate = true;
         const originalRecordId = snapshot.val();
-        duplicateRecordsToSave.push({ ...record, reason: `Duplicate of existing record: ${originalRecordId}` });
+        logger.warn(`Duplicate in DB for Intimation No: ${intimationNo}. Original ID: ${originalRecordId}`);
       }
+
       seenInThisBatch.add(intimationNo);
     }
-    
-    // Prepare the new record object to be saved
+
+    // --- PREPARE RECORD ---
     const newRecord: ProcessedRecord = {
       ...record,
       bundleNo: bundleNo,
@@ -678,41 +681,41 @@ export async function saveProcessedRecordsToDB(
       taluka: taluka,
     };
 
-    // Use the EXTRACTED uniqueId to create the database path
+    // Always save to processedRecords
     const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}/${uniqueId}`;
     updates[recordPath] = newRecord;
 
+    // Maintain intimationNo index
     if (intimationNo) {
       const indexPath = `/intimationNoIndex/${intimationNo}`;
-      updates[indexPath] = uniqueId; // Store the extracted uniqueId in the index
+      updates[indexPath] = uniqueId;
+    }
+
+    // If duplicate, also save to duplicateRecords
+    if (isDuplicate) {
+      const duplicatesRef = db.ref(`/duplicateRecords/${location}/${taluka}`);
+      const newDuplicateKey = duplicatesRef.push().key;
+      updates[`/duplicateRecords/${location}/${taluka}/${newDuplicateKey}`] = {
+        ...newRecord,
+        reason: "Duplicate record",
+      };
     }
   }
 
-  // --- SAVE DUPLICATE RECORDS FOR REVIEW ---
-  if (duplicateRecordsToSave.length > 0) {
-    const duplicatesRef = db.ref(`/duplicateRecords/${location}/${taluka}`);
-    duplicateRecordsToSave.forEach(dup => {
-      const newDuplicateKey = duplicatesRef.push().key; // Generate a key for the duplicate entry itself
-      const duplicateData = { 
-        ...dup, // The full original data of the duplicate record
-        submittedBy: userId, 
-        submittedAt: new Date().toISOString(), 
-        sourceBundleNo: bundleNo 
-      };
-      updates[`/duplicateRecords/${location}/${taluka}/${newDuplicateKey}`] = duplicateData;
-    });
-  }
-
-  // --- ATOMICALLY APPLY ALL UPDATES ---
+  // --- APPLY ALL UPDATES ---
   if (Object.keys(updates).length > 0) {
     await db.ref().update(updates);
   }
 
   // --- INCREMENT USER'S BUNDLE COUNT ---
-  const newRecordsCount = records.length; // Count all records since we process all of them
+  const newRecordsCount = records.length;
   if (newRecordsCount > 0) {
-    const userStateCountRef = db.ref(`userStates/${userId}/activeBundles/${taluka}/count`);
-    await userStateCountRef.set(admin.database.ServerValue.increment(newRecordsCount));
+    const userStateCountRef = db.ref(
+      `userStates/${userId}/activeBundles/${taluka}/count`
+    );
+    await userStateCountRef.set(
+      admin.database.ServerValue.increment(newRecordsCount)
+    );
   } else {
     logger.info("No new records to save in this batch.");
   }
@@ -1047,30 +1050,59 @@ export async function forceCompleteBundleInDB(
 
 /**
  * Manually assigns a specific bundle number to a user for a given taluka.
- * This will overwrite any existing active bundle for that taluka.
+ * UPDATED: Now updates the central bundle counter to prevent collisions.
  * @param userId - The UID of the user to assign the bundle to.
+ * @param location - The location slug (needed to find the correct counter).
  * @param taluka - The taluka for the assignment.
  * @param bundleNo - The specific bundle number to assign.
  */
 export async function manualAssignBundleToUserInDB(
   userId: string,
+  location: string,
   taluka: string,
   bundleNo: number
 ): Promise<ActiveBundle> {
   const db = admin.database();
   const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
+  const bundleCounterRef = db.ref(`bundleCounters/${location}/${taluka}`);
 
-  // Create the new bundle object that will be force-assigned.
+  // Step 1: Assign the bundle to the user.
   const newBundle: ActiveBundle = {
     bundleNo: bundleNo,
-    count: 0, // Reset the count for the new bundle
+    count: 0,
     taluka: taluka,
   };
-
-  // Use `set` to completely overwrite the user's current active bundle
-  // for this taluka with the new one.
   await userStateRef.set(newBundle);
 
+  // Step 2: Update the central counter to reflect the manual assignment.
+  await bundleCounterRef.transaction((currentData: BundleCounter | null) => {
+    // If the counter doesn't exist, initialize it based on the manual assignment.
+    if (currentData === null) {
+      return { nextBundle: bundleNo + 1, gaps: [] };
+    }
+
+    // If the assigned number was waiting in the 'gaps' array, remove it.
+    if (currentData.gaps && currentData.gaps.includes(bundleNo)) {
+      currentData.gaps = currentData.gaps.filter((g) => g !== bundleNo);
+    }
+
+    // If the assigned number is the 'nextBundle', advance the counter.
+    if (currentData.nextBundle === bundleNo) {
+      currentData.nextBundle = bundleNo + 1;
+    }
+
+    // This prevents a scenario where a high manual number is assigned
+    // but the counter stays low.
+    if (bundleNo >= currentData.nextBundle) {
+      currentData.nextBundle = bundleNo + 1;
+    }
+
+    return currentData;
+  });
+
+  logger.info(
+    `Manually assigned bundle #${bundleNo} to user ${userId} and updated counter.`
+  );
   return newBundle;
 }
 

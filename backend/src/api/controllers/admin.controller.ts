@@ -110,9 +110,9 @@ export const manualAssignBundle = async (
   res: Response
 ): Promise<Response> => {
   try {
-    const { userId, taluka, bundleNo } = req.body;
+    const { userId, taluka, bundleNo, location } = req.body;
 
-    if (!userId || !taluka || !bundleNo) {
+    if (!userId || !taluka || !bundleNo || !location) {
       return res.status(400).json({
         message:
           'Bad Request: "userId", "taluka", and "bundleNo" are required.',
@@ -121,6 +121,7 @@ export const manualAssignBundle = async (
 
     const assignedBundle = await firebaseService.manualAssignBundleToUserInDB(
       userId,
+      location as string,
       taluka,
       bundleNo
     );
