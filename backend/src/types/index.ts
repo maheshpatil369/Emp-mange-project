@@ -29,7 +29,7 @@ export interface BundleCounter {
 // saved to the /processedRecords path.
 export interface ProcessedRecord {
   // These fields are added by the backend
-  uniqueId: string;
+  // uniqueId: string;
   bundleNo: number;
   processedBy: string;
   processedAt: string;
