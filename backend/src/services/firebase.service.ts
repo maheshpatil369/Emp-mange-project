@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import { User, ActiveBundle, BundleCounter, ProcessedRecord } from "../types";
+import { User, ActiveBundle, BundleCounter } from "../types";
 import logger from "../config/logger"; // Import the new logger
 
 /**
@@ -289,11 +289,11 @@ export async function assignNewBundleToUser(
  * @param taluka - The taluka name.
  * @returns A 4-letter prefix string.
  */
-function generateIdPrefix(location: string, taluka: string): string {
-  const locationPrefix = location.substring(0, 2).toUpperCase();
-  const talukaPrefix = taluka.substring(0, 2).toUpperCase();
-  return `${locationPrefix}${talukaPrefix}`;
-}
+// function generateIdPrefix(location: string, taluka: string): string {
+//   const locationPrefix = location.substring(0, 2).toUpperCase();
+//   const talukaPrefix = taluka.substring(0, 2).toUpperCase();
+//   return `${locationPrefix}${talukaPrefix}`;
+// }
 
 /**
  * Saves a batch of processed records to the database.
@@ -577,6 +577,28 @@ function generateIdPrefix(location: string, taluka: string): string {
 // }
 
 
+interface ProcessedRecord {
+  [key: string]: any; // Allows for dynamic keys from the source file
+  bundleNo: number;
+  processedBy: string;
+  processedAt: string;
+  sourceFile: string;
+  taluka: string;
+}
+
+/**
+ * Validates the user's active bundle and saves processed records to the database.
+ * It extracts a 'uniqueId' from each record to use as its database key.
+ * It also checks for duplicate 'Intimation No' values.
+ *
+ * @param userId - The ID of the user submitting the records.
+ * @param location - The location (district) of the data.
+ * @param taluka - The taluka of the data.
+ * @param bundleNo - The bundle number being submitted.
+ * @param records - An array of records to save, each containing a uniqueId.
+ * @param sourceFile - The name of the file from which records were processed.
+ */
+
 export async function saveProcessedRecordsToDB(
   userId: string,
   location: string,
@@ -587,37 +609,45 @@ export async function saveProcessedRecordsToDB(
 ): Promise<void> {
   const db = admin.database();
 
-  // --- NEW: VALIDATE ACTIVE BUNDLE ---
+  // --- VALIDATE ACTIVE BUNDLE ---
   const activeBundleRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
   const activeBundleSnapshot = await activeBundleRef.once("value");
 
   if (!activeBundleSnapshot.exists()) {
     throw new Error(`User does not have an active bundle for taluka: ${taluka}.`);
   }
-
   const activeBundleData = activeBundleSnapshot.val();
   if (Number(activeBundleData.bundleNo) !== Number(bundleNo)) {
     throw new Error(
       `Submission for bundle #${bundleNo} is not allowed. The active bundle for ${taluka} is #${activeBundleData.bundleNo}.`
     );
   }
-  // --- END OF NEW VALIDATION ---
 
-  // --- EXISTING VALIDATION CHECKS ---
+  // --- VALIDATION CHECKS ---
   if (records.length > 250) {
     throw new Error("Cannot sync more than 250 records at a time.");
   }
 
-  const idCounterRef = db.ref(`idCounters/${location}/${taluka}`);
   const updates: { [key: string]: any } = {};
-  let newRecordsCount = 0;
-  const seenInThisBatch = new Set();
   const duplicateRecordsToSave: any[] = [];
-
+  const seenInThisBatch = new Set();
+  
   for (const record of records) {
+    const uniqueIdKey = Object.keys(record).find(
+      (k) => k.trim().toLowerCase().replace(/[\s_-]/g, '') === 'uniqueid'
+    );
+
+    if (!uniqueIdKey || !record[uniqueIdKey]) {
+      logger.error("A record in the batch is missing its unique ID.", { record });
+      throw new Error(`A record in the batch is missing its unique ID.`);
+    }
+    const uniqueId = record[uniqueIdKey];
+    
+    // --- DUPLICATE CHECKING LOGIC ---
     const intimationNoKey = Object.keys(record).find(
       (k) => k.trim().toLowerCase() === "intimation no"
     );
+
     const intimationNo = intimationNoKey ? record[intimationNoKey] : null;
 
     if (intimationNo) {
@@ -625,43 +655,22 @@ export async function saveProcessedRecordsToDB(
       if (seenInThisBatch.has(intimationNo)) {
         logger.warn(`Duplicate within batch for Intimation No: ${intimationNo}.`);
         duplicateRecordsToSave.push({ ...record, reason: "Duplicate within same batch" });
-        // continue; // <-- REMOVED: By removing 'continue', the record will still be processed normally.
       }
 
       // Check for duplicates against the database index
       const indexRef = db.ref(`/intimationNoIndex/${intimationNo}`);
       const snapshot = await indexRef.once("value");
-
       if (snapshot.exists()) {
         logger.warn(`Duplicate in DB for Intimation No: ${intimationNo}.`);
         const originalRecordId = snapshot.val();
         duplicateRecordsToSave.push({ ...record, reason: `Duplicate of existing record: ${originalRecordId}` });
-        // continue; // <-- REMOVED: By removing 'continue', the record will still be processed normally.
       }
-    }
-
-    // If we reach here, the record is unique (or we are intentionally allowing duplicates)
-    if (intimationNo) {
       seenInThisBatch.add(intimationNo);
     }
-
-    // Generate a unique ID for the new record
-    const { snapshot: idSnapshot } = await idCounterRef.transaction(
-      (currentData: { lastId: number } | null) => {
-        if (currentData === null) { return { lastId: 1 }; }
-        currentData.lastId++;
-        return currentData;
-      }
-    );
     
-    const newId = idSnapshot.val().lastId;
-    const prefix = generateIdPrefix(location, taluka);
-    const uniqueId = `${prefix}${newId}`;
-
-    // Prepare the new record to be saved
+    // Prepare the new record object to be saved
     const newRecord: ProcessedRecord = {
       ...record,
-      uniqueId: uniqueId,
       bundleNo: bundleNo,
       processedBy: userId,
       processedAt: new Date().toISOString(),
@@ -669,48 +678,41 @@ export async function saveProcessedRecordsToDB(
       taluka: taluka,
     };
 
-    // Add the new record and its index entry to the updates object
+    // Use the EXTRACTED uniqueId to create the database path
     const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}/${uniqueId}`;
     updates[recordPath] = newRecord;
 
     if (intimationNo) {
       const indexPath = `/intimationNoIndex/${intimationNo}`;
-      updates[indexPath] = uniqueId; // Store the uniqueId in the index
+      updates[indexPath] = uniqueId; // Store the extracted uniqueId in the index
     }
-
-    newRecordsCount++;
   }
 
-  // Process and prepare any found duplicates for saving
-  // This block now runs alongside saving all records to the main path.
+  // --- SAVE DUPLICATE RECORDS FOR REVIEW ---
   if (duplicateRecordsToSave.length > 0) {
     const duplicatesRef = db.ref(`/duplicateRecords/${location}/${taluka}`);
     duplicateRecordsToSave.forEach(dup => {
-      const newDuplicateKey = duplicatesRef.push().key;
-      const duplicateData = {
+      const newDuplicateKey = duplicatesRef.push().key; // Generate a key for the duplicate entry itself
+      const duplicateData = { 
         ...dup, // The full original data of the duplicate record
-        submittedBy: userId,
-        submittedAt: new Date().toISOString(),
-        sourceBundleNo: bundleNo,
+        submittedBy: userId, 
+        submittedAt: new Date().toISOString(), 
+        sourceBundleNo: bundleNo 
       };
       updates[`/duplicateRecords/${location}/${taluka}/${newDuplicateKey}`] = duplicateData;
     });
   }
 
-  // Atomically save all records (including duplicates) to processedRecords,
-  // their index entries, AND the separate duplicate records path.
+  // --- ATOMICALLY APPLY ALL UPDATES ---
   if (Object.keys(updates).length > 0) {
     await db.ref().update(updates);
   }
 
-  // If new records were saved, increment the user's active bundle count
+  // --- INCREMENT USER'S BUNDLE COUNT ---
+  const newRecordsCount = records.length; // Count all records since we process all of them
   if (newRecordsCount > 0) {
-    const userStateCountRef = db.ref(
-      `userStates/${userId}/activeBundles/${taluka}/count`
-    );
-    await userStateCountRef.set(
-      admin.database.ServerValue.increment(newRecordsCount)
-    );
+    const userStateCountRef = db.ref(`userStates/${userId}/activeBundles/${taluka}/count`);
+    await userStateCountRef.set(admin.database.ServerValue.increment(newRecordsCount));
   } else {
     logger.info("No new records to save in this batch.");
   }
