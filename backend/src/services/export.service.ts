@@ -3,10 +3,7 @@ import { ProcessedRecord, User } from "../types";
 
 /**
  * Separates records into two arrays: one for unique records and one for duplicates.
- * The separation is based on a provided comparison key.
- * @param records - An array of all processed records to be sorted.
- * @param comparisonKey - The name of the field in the record object to check for duplicates.
- * @returns An object containing two arrays: `uniqueRecords` and `duplicateRecords`.
+ * (This function remains unchanged)
  */
 export function separateRecords(
   records: ProcessedRecord[],
@@ -47,11 +44,6 @@ export function separateRecords(
 
 /**
  * Helper function to add a worksheet to a workbook and populate it with data.
- * This version ensures data integrity by creating a master list of all possible headers.
- * @param workbook - The ExcelJS workbook instance.
- * @param records - The array of records to add to the sheet.
- * @param users - The array of all users for data enrichment.
- * @param worksheetName - The name for the new worksheet.
  */
 const addSheetToWorkbook = (
   workbook: ExcelJS.Workbook,
@@ -62,18 +54,13 @@ const addSheetToWorkbook = (
   const worksheet = workbook.addWorksheet(worksheetName);
   const userMap = new Map(users.map((user) => [user.id, user]));
 
-  // --- THIS IS THE FIX ---
-
-  // 1. Create a master set of all possible keys by iterating through all records first.
   const allKeys = new Set<string>();
   records.forEach((record) => {
     Object.keys(record).forEach((key) => allKeys.add(key));
   });
 
-  // 2. Define the final, consistent header order.
-  // Start with your desired metadata columns.
   const orderedHeaders = [
-    "uniqueId",
+    "UniqueId", 
     "processedBy_userName",
     "processedBy_mobile",
     "processedAt",
@@ -81,42 +68,53 @@ const addSheetToWorkbook = (
     "bundleNo",
     "sourceFile",
   ];
-  // Then add all other dynamic data columns, sorted alphabetically for consistency.
+
   const dynamicHeaders = [...allKeys]
-    .filter((key) => !orderedHeaders.includes(key) && key !== "processedBy")
+    .filter(
+      (key) =>
+        !orderedHeaders.includes(key) &&
+        key !== "processedBy" &&
+        // This filter correctly removes the original "UniqueId" field
+        key
+          .trim()
+          .toLowerCase()
+          .replace(/[\s_-]/g, "") !== "uniqueid"
+    )
     .sort();
 
   const finalHeaders = [...orderedHeaders, ...dynamicHeaders];
 
-  // 3. Set the worksheet columns based on the final, ordered master list.
-  // This tells ExcelJS exactly where each piece of data belongs.
-  worksheet.columns = finalHeaders.map((key) => ({
-    header: key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()), // Prettify headers
-    key: key, // The 'key' is crucial for mapping data correctly.
-    width: 20,
-  }));
+  worksheet.columns = finalHeaders.map((key) => {
+    let headerText: string;
 
-  // 4. Add the data rows. ExcelJS will now use the 'key' from step 3
-  // to place each value in the correct column, leaving cells blank if a key is missing.
+    // --- FIX #2: Check for the 'id' key and rename its header to 'UniqueId' ---
+    if (key === "id") {
+      headerText = "UniqueId";
+    } else {
+      headerText = key
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (l) => l.toUpperCase());
+    }
+
+    return {
+      header: headerText,
+      key: key,
+      width: 20,
+    };
+  });
+
   records.forEach((record) => {
     const user = userMap.get(record.processedBy);
-    const rowData: any = { ...record }; // Copy the record data
-
-    // Enrich the row with user details
+    const rowData: any = { ...record };
     rowData.processedBy_userName = user ? user.name : "N/A";
     rowData.processedBy_mobile = user ? user.mobile : "N/A";
-
     worksheet.addRow(rowData);
   });
 };
 
 /**
- * Generates a single Excel file with two sheets: one for unique records and one for duplicates.
- * This is the main function to be called by the controller.
- * @param uniqueRecords - Array of unique processed records.
- * @param duplicateRecords - Array of duplicate processed records.
- * @param users - Array of all users for enriching data.
- * @returns A promise that resolves to the combined Excel file as a Buffer.
+ * Generates a single Excel file with two sheets.
+ * (This function remains unchanged)
  */
 export async function generateCombinedExportExcel(
   uniqueRecords: ProcessedRecord[],
@@ -125,36 +123,28 @@ export async function generateCombinedExportExcel(
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
 
-  // Add the "Unique Records" sheet if there is data for it
   if (uniqueRecords.length > 0) {
     addSheetToWorkbook(workbook, uniqueRecords, users, "Unique Records");
   }
 
-  // Add the "Duplicate Records" sheet if there is data for it
   if (duplicateRecords.length > 0) {
     addSheetToWorkbook(workbook, duplicateRecords, users, "Duplicate Records");
   }
 
-  // Write the entire workbook with both sheets to a buffer
   const arrayBuffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(arrayBuffer);
 }
 
 /**
  * Generates an Excel file for the log of submitted duplicate records.
- * @param records - An array of duplicate records fetched from /duplicateRecords.
- * @param users - An array of all users for data enrichment.
- * @returns A promise that resolves to the Excel file as a Buffer.
+ * (This function remains unchanged)
  */
 export async function generateDuplicateLogExcel(
   records: any[],
   users: User[]
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-
-  // Add a single sheet for the duplicate log.
   addSheetToWorkbook(workbook, records, users, "Duplicate Submission Log");
-
   const arrayBuffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(arrayBuffer);
 }
