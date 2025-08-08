@@ -185,132 +185,459 @@ class DataProvider with ChangeNotifier {
     }
   }
 
-  Future<void> fetchAndSyncBundles() async {
-    _isLoadingBundles = true;
-    _errorMessage = null;
-    notifyListeners();
+  // Future<void> fetchAndSyncBundles() async {
+  //   _isLoadingBundles = true;
+  //   _errorMessage = null;
+  //   notifyListeners();
 
-    try {
-      // 1. First, try to load from SharedPreferences (preserves counts)
-      final userEmail = await _getCurrentUserEmail();
-      String? bundlesJson;
+  //   try {
+  //     // 1. First, try to load from SharedPreferences (preserves counts)
+  //     final userEmail = await _getCurrentUserEmail();
+  //     String? bundlesJson;
 
-      if (userEmail != null) {
-        final prefs = await SharedPreferences.getInstance();
-        bundlesJson = prefs.getString('activeBundles_$userEmail');
-        print('Loading bundles for user: $userEmail');
-      }
+  //     if (userEmail != null) {
+  //       final prefs = await SharedPreferences.getInstance();
+  //       bundlesJson = prefs.getString('activeBundles_$userEmail');
+  //       print('Loading bundles for user: $userEmail');
+  //     }
 
-      if (bundlesJson != null) {
-        print('Loading bundles from SharedPreferences first...');
-        final savedBundles = (json.decode(bundlesJson) as List)
-            .map((item) => item as Map<String, dynamic>)
-            .toList();
+  //     if (bundlesJson != null) {
+  //       print('Loading bundles from SharedPreferences first...');
+  //       final savedBundles = (json.decode(bundlesJson) as List)
+  //           .map((item) => item as Map<String, dynamic>)
+  //           .toList();
 
-        // Load saved bundles into local database if not already there
-        final localBundles = await _databaseHelper.getActiveLocalBundles();
-        if (localBundles.isEmpty && savedBundles.isNotEmpty) {
-          for (var bundle in savedBundles) {
-            await _databaseHelper.insertBundle(bundle);
-          }
-          print(
-              'Restored ${savedBundles.length} bundles from SharedPreferences to local DB');
-        }
-      }
+  //       // Load saved bundles into local database if not already there
+  //       final localBundles = await _databaseHelper.getActiveLocalBundles();
+  //       if (localBundles.isEmpty && savedBundles.isNotEmpty) {
+  //         for (var bundle in savedBundles) {
+  //           await _databaseHelper.insertBundle(bundle);
+  //         }
+  //         print(
+  //             'Restored ${savedBundles.length} bundles from SharedPreferences to local DB');
+  //       }
+  //     }
 
-      // 2. Always load local bundles first for immediate UI display
-      _serverBundles = await _databaseHelper.getActiveLocalBundles();
-      notifyListeners(); // Show local data immediately
+  //     // 2. Always load local bundles first for immediate UI display
+  //     _serverBundles = await _databaseHelper.getActiveLocalBundles();
+  //     notifyListeners(); // Show local data immediately
 
-      // 3. Try to sync with server in background (but preserve local counts)
-      final serverResponse = await _apiService.fetchActiveBundles().timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw TimeoutException('Server request timed out');
-        },
-      );
+  //     // 3. Try to sync with server in background (but preserve local counts)
+  //     final serverResponse = await _apiService.fetchActiveBundles().timeout(
+  //       const Duration(seconds: 10),
+  //       onTimeout: () {
+  //         throw TimeoutException('Server request timed out');
+  //       },
+  //     );
 
-      // If response only contains a 'message', treat as no bundles
-      if (serverResponse.containsKey('message') && serverResponse.length == 1) {
-        print('No active bundles for user on server.');
-        _isLoadingBundles = false;
-        notifyListeners();
-        return;
-      }
+  //     // If response only contains a 'message', treat as no bundles
+  //     if (serverResponse.containsKey('message') && serverResponse.length == 1) {
+  //       print('No active bundles for user on server.');
+  //       _isLoadingBundles = false;
+  //       notifyListeners();
+  //       return;
+  //     }
 
-      final serverBundlesList = serverResponse.values
-          .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
-          .toList();
+  //     final serverBundlesList = serverResponse.values
+  //         .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
+  //         .toList();
 
-      // 4. Sync server data with local data (but ALWAYS preserve local counts)
-      final localBundles = await _databaseHelper.getActiveLocalBundles();
-      final localBundlesMap = {for (var b in localBundles) b['bundleNo']: b};
+  //     // 4. Sync server data with local data (but ALWAYS preserve local counts)
+  //     final localBundles = await _databaseHelper.getActiveLocalBundles();
+  //     final localBundlesMap = {for (var b in localBundles) b['bundleNo']: b};
 
-      // 5. Apply changes to the local database (but preserve local counts)
-      final bundlesToUpdate = <Map<String, dynamic>>[];
-      final bundlesToAdd = <Map<String, dynamic>>[];
+  //     // 5. Apply changes to the local database (but preserve local counts)
+  //     final bundlesToUpdate = <Map<String, dynamic>>[];
+  //     final bundlesToAdd = <Map<String, dynamic>>[];
 
-      // Check server bundles against local ones
-      for (var serverBundle in serverBundlesList) {
-        final bundleNo = serverBundle['bundleNo'];
-        if (localBundlesMap.containsKey(bundleNo)) {
-          // Bundle exists locally - ALWAYS preserve local count and assignedAt
-          final localBundle = localBundlesMap[bundleNo]!;
+  //     // Check server bundles against local ones
+  //     for (var serverBundle in serverBundlesList) {
+  //       final bundleNo = serverBundle['bundleNo'];
+  //       if (localBundlesMap.containsKey(bundleNo)) {
+  //         // Bundle exists locally - ALWAYS preserve local count and assignedAt
+  //         final localBundle = localBundlesMap[bundleNo]!;
+  //         final updatedBundle = Map<String, dynamic>.from(serverBundle);
+  //         updatedBundle['count'] = localBundle['count']; // PRESERVE local count
+  //         updatedBundle['assignedAt'] =
+  //             localBundle['assignedAt']; // PRESERVE assignedAt
+
+  //         // Only update if there are actual changes (excluding count and assignedAt)
+  //         bool needsUpdate = false;
+  //         ['taluka', 'status'].forEach((field) {
+  //           if (serverBundle[field] != localBundle[field]) {
+  //             needsUpdate = true;
+  //           }
+  //         });
+
+  //         if (needsUpdate) {
+  //           bundlesToUpdate.add(updatedBundle);
+  //           print(
+  //               'Preserving local count ${localBundle['count']} for bundle ${bundleNo}');
+  //         }
+  //       } else {
+  //         // New bundle from server - use server count (usually 0) only for new bundles
+  //         serverBundle['count'] =
+  //             serverBundle['count'] ?? 0; // Ensure count is not null
+  //         bundlesToAdd.add(serverBundle);
+  //         print(
+  //             'Adding new bundle ${bundleNo} from server with count ${serverBundle['count']}');
+  //       }
+  //     }
+
+  //     // Apply changes
+  //     for (var bundle in bundlesToAdd) {
+  //       await _databaseHelper.insertBundle(bundle);
+  //     }
+  //     for (var bundle in bundlesToUpdate) {
+  //       await _databaseHelper.updateBundle(bundle);
+  //     }
+
+  //     // 6. Refresh local state and show updated data
+  //     _serverBundles = await _databaseHelper.getActiveLocalBundles();
+
+  //     // 7. Save the synced bundles to SharedPreferences (with preserved counts)
+  //     await _saveBundlesToPrefs(_serverBundles);
+
+  //     print(
+  //         'Successfully synced bundles with server while preserving local counts.');
+  //   } catch (e) {
+  //     _errorMessage =
+  //         'Failed to sync with server. Showing local data: ${e.toString()}';
+  //     print('Error syncing with server, using local data: $e');
+  //     // Use local data as fallback
+  //     _serverBundles = await _databaseHelper.getActiveLocalBundles();
+  //   } finally {
+  //     _isLoadingBundles = false;
+  //     notifyListeners();
+  //   }
+  // }
+
+//   Future<void> fetchAndSyncBundles() async {
+//   _isLoadingBundles = true;
+//   _errorMessage = null;
+//   notifyListeners();
+
+//   try {
+//     // 1. First, try to load from SharedPreferences (preserves counts)
+//     final userEmail = await _getCurrentUserEmail();
+//     String? bundlesJson;
+
+//     if (userEmail != null) {
+//       final prefs = await SharedPreferences.getInstance();
+//       bundlesJson = prefs.getString('activeBundles_$userEmail');
+//       print('Loading bundles for user: $userEmail');
+//     }
+
+//     if (bundlesJson != null) {
+//       print('Loading bundles from SharedPreferences first...');
+//       final savedBundles = (json.decode(bundlesJson) as List)
+//           .map((item) => item as Map<String, dynamic>)
+//           .toList();
+
+//       final localBundles = await _databaseHelper.getActiveLocalBundles();
+//       if (localBundles.isEmpty && savedBundles.isNotEmpty) {
+//         for (var bundle in savedBundles) {
+//           await _databaseHelper.insertBundle(bundle);
+//         }
+//         print('Restored ${savedBundles.length} bundles from SharedPreferences to local DB');
+//       }
+//     }
+
+//     // 2. Always load local bundles first for immediate UI display
+//     _serverBundles = await _databaseHelper.getActiveLocalBundles();
+//     notifyListeners();
+
+//     // 3. Try to sync with server in background
+//     final serverResponse = await _apiService.fetchActiveBundles().timeout(
+//       const Duration(seconds: 10),
+//       onTimeout: () {
+//         throw TimeoutException('Server request timed out');
+//       },
+//     );
+
+//     // If response indicates no active bundles, delete all local bundles.
+//     if (serverResponse.containsKey('message') && serverResponse.length == 1) {
+//       print('No active bundles for user on server. Deleting all local bundles.');
+//       // Use the existing deleteAllLocalBundles function from your DataProvider
+//       await deleteAllLocalBundles();
+//       _serverBundles = [];
+//       _isLoadingBundles = false;
+//       notifyListeners();
+//       return;
+//     }
+
+//     final serverBundlesList = serverResponse.values
+//         .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
+//         .toList();
+
+//     // Get a set of active bundle numbers from the server for easy lookup
+//     final serverBundleNos = serverBundlesList.map((b) => b['bundleNo'] as int).toSet();
+
+//     // --- LOGIC TO DELETE STALE BUNDLES ---
+//     final initialLocalBundles = await _databaseHelper.getActiveLocalBundles();
+//     final bundlesToDelete = <int>[];
+
+//     for (var localBundle in initialLocalBundles) {
+//       final localBundleNo = localBundle['bundleNo'] as int;
+//       if (!serverBundleNos.contains(localBundleNo)) {
+//         bundlesToDelete.add(localBundleNo);
+//       }
+//     }
+
+//     // Use the deleteStaleBundles function you added to DatabaseHelper
+//     if (bundlesToDelete.isNotEmpty) {
+//       await _databaseHelper.deleteStaleBundles(bundlesToDelete);
+//     }
+//     // --- END OF DELETE LOGIC ---
+
+//     // 4. Sync server data with the remaining local data
+//     final remainingLocalBundles = await _databaseHelper.getActiveLocalBundles();
+//     final localBundlesMap = {for (var b in remainingLocalBundles) b['bundleNo']: b};
+
+//     // 5. Apply updates and additions
+//     final bundlesToUpdate = <Map<String, dynamic>>[];
+//     final bundlesToAdd = <Map<String, dynamic>>[];
+
+//     for (var serverBundle in serverBundlesList) {
+//       final bundleNo = serverBundle['bundleNo'];
+//       if (localBundlesMap.containsKey(bundleNo)) {
+//         final localBundle = localBundlesMap[bundleNo]!;
+//         final updatedBundle = Map<String, dynamic>.from(serverBundle);
+//         updatedBundle['count'] = localBundle['count'];
+//         updatedBundle['assignedAt'] = localBundle['assignedAt'];
+
+//         bool needsUpdate = ['taluka', 'status'].any((field) => serverBundle[field] != localBundle[field]);
+
+//         if (needsUpdate) {
+//           bundlesToUpdate.add(updatedBundle);
+//         }
+//       } else {
+//         serverBundle['count'] = serverBundle['count'] ?? 0;
+//         bundlesToAdd.add(serverBundle);
+//       }
+//     }
+
+//     for (var bundle in bundlesToAdd) {
+//       await _databaseHelper.insertBundle(bundle);
+//     }
+//     for (var bundle in bundlesToUpdate) {
+//       await _databaseHelper.updateBundle(bundle);
+//     }
+
+//     // 6. Refresh UI and save state
+//     _serverBundles = await _databaseHelper.getActiveLocalBundles();
+//     await _saveBundlesToPrefs(_serverBundles);
+
+//     print('Successfully synced bundles with server.');
+//   } catch (e) {
+//     _errorMessage = 'Failed to sync with server. Showing local data: ${e.toString()}';
+//     print('Error syncing with server, using local data: $e');
+//     _serverBundles = await _databaseHelper.getActiveLocalBundles();
+//   } finally {
+//     _isLoadingBundles = false;
+//     notifyListeners();
+//   }
+// }
+
+// In: mobile_app/lib/providers/data_provider.dart
+
+// REPLACE your old function with this one
+  // Future<void> fetchAndSyncBundles() async {
+  //   _isLoadingBundles = true;
+  //   _errorMessage = null;
+  //   notifyListeners();
+
+  //   try {
+  //     // 1. Load local data first for a fast UI response
+  //     _serverBundles = await _databaseHelper.getActiveLocalBundles();
+  //     notifyListeners();
+
+  //     // 2. Fetch the latest list of active bundles from the server
+  //     final serverResponse = await _apiService.fetchActiveBundles().timeout(
+  //           const Duration(seconds: 10),
+  //           onTimeout: () => throw TimeoutException('Server request timed out'),
+  //         );
+
+  //     // If the server returns a message indicating no active bundles, delete all local ones.
+  //     if (serverResponse.containsKey('message') && serverResponse.length == 1) {
+  //       print('No active bundles on server. Deleting all local bundles.');
+  //       await deleteAllLocalBundles(); // Using your existing function here is perfect!
+  //       _serverBundles = [];
+  //       _isLoadingBundles = false;
+  //       notifyListeners();
+  //       return;
+  //     }
+
+  //     final serverBundlesList = serverResponse.values
+  //         .map<Map<String, dynamic>>((v) => Map<String, dynamic>.from(v))
+  //         .toList();
+
+  //     final serverBundleNos =
+  //         serverBundlesList.map((b) => b['bundleNo'] as int).toSet();
+
+  //     // --- CORRECTED LOGIC: DELETE STALE BUNDLES DIRECTLY FROM THE DATA PROVIDER ---
+  //     final initialLocalBundles = await _databaseHelper.getActiveLocalBundles();
+  //     final bundlesToDelete = <int>[];
+
+  //     for (var localBundle in initialLocalBundles) {
+  //       final localBundleNo = localBundle['bundleNo'] as int;
+  //       if (!serverBundleNos.contains(localBundleNo)) {
+  //         bundlesToDelete.add(localBundleNo);
+  //       }
+  //     }
+
+  //     // Perform the selective delete right here, where we have a valid DB reference.
+  //     if (bundlesToDelete.isNotEmpty) {
+  //       final db = await _databaseHelper
+  //           .database; // This is the correct way to get the DB instance.
+  //       await db.delete(
+  //         'bundles',
+  //         where:
+  //             'bundleNo IN (${List.filled(bundlesToDelete.length, '?').join(',')})',
+  //         whereArgs: bundlesToDelete,
+  //       );
+  //       print(
+  //           'Deleted ${bundlesToDelete.length} stale bundles from DataProvider.');
+  //     }
+  //     // --- END OF CORRECTED LOGIC ---
+
+  //     // 4. Sync the remaining bundles
+  //     final remainingLocalBundles =
+  //         await _databaseHelper.getActiveLocalBundles();
+  //     final localBundlesMap = {
+  //       for (var b in remainingLocalBundles) b['bundleNo']: b
+  //     };
+
+  //     for (var serverBundle in serverBundlesList) {
+  //       final bundleNo = serverBundle['bundleNo'];
+  //       if (localBundlesMap.containsKey(bundleNo)) {
+  //         // Update existing bundle, but preserve the local count and assigned date
+  //         final localBundle = localBundlesMap[bundleNo]!;
+  //         final updatedBundle = Map<String, dynamic>.from(serverBundle);
+  //         updatedBundle['count'] = localBundle['count'];
+  //         updatedBundle['assignedAt'] = localBundle['assignedAt'];
+  //         await _databaseHelper.updateBundle(updatedBundle);
+  //       } else {
+  //         // Add new bundle from the server
+  //         await _databaseHelper.insertBundle(serverBundle);
+  //       }
+  //     }
+
+  //     // 5. Refresh the UI with the final, correct state
+  //     _serverBundles = await _databaseHelper.getActiveLocalBundles();
+  //     await _saveBundlesToPrefs(_serverBundles);
+
+  //     print('Successfully synced bundles with server.');
+  //   } catch (e) {
+  //     _errorMessage =
+  //         'Failed to sync with server. Showing local data: ${e.toString()}';
+  //     print('Error syncing with server, using local data: $e');
+  //     _serverBundles = await _databaseHelper.getActiveLocalBundles();
+  //   } finally {
+  //     _isLoadingBundles = false;
+  //     notifyListeners();
+  //   }
+  // }
+
+
+
+// In: mobile_app/lib/providers/data_provider.dart
+
+// REPLACE your old function with this complete version
+// In: mobile_app/lib/providers/data_provider.dart
+
+// REPLACE your old function with this complete and final version
+Future<void> fetchAndSyncBundles() async {
+  _isLoadingBundles = true;
+  _errorMessage = null;
+  notifyListeners();
+
+  try {
+    // 1. GET BOTH LISTS UPFRONT
+    // Get the fresh list of active bundles from the server
+    final serverResponse = await _apiService.fetchActiveBundles().timeout(const Duration(seconds: 15));
+    
+    List<Map<String, dynamic>> serverBundlesList = [];
+    // Handle the case where the server returns a message or is empty
+    if (serverResponse.isNotEmpty && !serverResponse.containsKey('message')) {
+        serverBundlesList = (serverResponse.values.toList() as List).map((v) => Map<String, dynamic>.from(v)).toList();
+    }
+    
+    final serverBundlesMap = {for (var b in serverBundlesList) b['bundleNo']: b};
+
+    // Get the current list of all active bundles on the phone
+    final localBundlesList = await _databaseHelper.getActiveLocalBundles();
+    final localBundlesMap = {for (var b in localBundlesList) b['bundleNo']: b};
+
+    // 2. CREATE THE "TO-DO" LISTS BY COMPARING THE TWO MAPS
+    final List<Map<String, dynamic>> bundlesToAdd = [];
+    final List<Map<String, dynamic>> bundlesToUpdate = [];
+    final List<int> bundleNosToDelete = [];
+
+    // Check for bundles to add or update by iterating through server bundles
+    for (final serverBundleNo in serverBundlesMap.keys) {
+      final serverBundle = serverBundlesMap[serverBundleNo]!;
+      if (localBundlesMap.containsKey(serverBundleNo)) {
+        // IT EXISTS LOCALLY -> This is an UPDATE candidate
+        final localBundle = localBundlesMap[serverBundleNo]!;
+        // Only update if the status has changed
+        if (localBundle['status'] != serverBundle['status']) {
+           // Preserve local count and assigned date
           final updatedBundle = Map<String, dynamic>.from(serverBundle);
-          updatedBundle['count'] = localBundle['count']; // PRESERVE local count
-          updatedBundle['assignedAt'] =
-              localBundle['assignedAt']; // PRESERVE assignedAt
-
-          // Only update if there are actual changes (excluding count and assignedAt)
-          bool needsUpdate = false;
-          ['taluka', 'status'].forEach((field) {
-            if (serverBundle[field] != localBundle[field]) {
-              needsUpdate = true;
-            }
-          });
-
-          if (needsUpdate) {
-            bundlesToUpdate.add(updatedBundle);
-            print(
-                'Preserving local count ${localBundle['count']} for bundle ${bundleNo}');
-          }
-        } else {
-          // New bundle from server - use server count (usually 0) only for new bundles
-          serverBundle['count'] =
-              serverBundle['count'] ?? 0; // Ensure count is not null
-          bundlesToAdd.add(serverBundle);
-          print(
-              'Adding new bundle ${bundleNo} from server with count ${serverBundle['count']}');
+          updatedBundle['count'] = localBundle['count'];
+          updatedBundle['assignedAt'] = localBundle['assignedAt'];
+          bundlesToUpdate.add(updatedBundle);
         }
+      } else {
+        // IT DOES NOT EXIST LOCALLY -> This is a NEW bundle to add
+        bundlesToAdd.add(serverBundle);
       }
+    }
 
-      // Apply changes
-      for (var bundle in bundlesToAdd) {
-        await _databaseHelper.insertBundle(bundle);
+    // Check for bundles to delete by iterating through local bundles
+    for (final localBundleNo in localBundlesMap.keys) {
+      if (!serverBundlesMap.containsKey(localBundleNo)) {
+        // IT EXISTS LOCALLY BUT NOT ON SERVER -> This bundle is stale and must be deleted
+        bundleNosToDelete.add(localBundleNo);
       }
+    }
+
+    // 3. EXECUTE ALL DATABASE OPERATIONS
+    if (bundleNosToDelete.isNotEmpty) {
+      print("Deleting ${bundleNosToDelete.length} stale bundles: $bundleNosToDelete");
+      await _databaseHelper.deleteStaleBundles(bundleNosToDelete);
+    }
+    if (bundlesToUpdate.isNotEmpty) {
+      print("Updating ${bundlesToUpdate.length} bundles.");
       for (var bundle in bundlesToUpdate) {
         await _databaseHelper.updateBundle(bundle);
       }
-
-      // 6. Refresh local state and show updated data
-      _serverBundles = await _databaseHelper.getActiveLocalBundles();
-
-      // 7. Save the synced bundles to SharedPreferences (with preserved counts)
-      await _saveBundlesToPrefs(_serverBundles);
-
-      print(
-          'Successfully synced bundles with server while preserving local counts.');
-    } catch (e) {
-      _errorMessage =
-          'Failed to sync with server. Showing local data: ${e.toString()}';
-      print('Error syncing with server, using local data: $e');
-      // Use local data as fallback
-      _serverBundles = await _databaseHelper.getActiveLocalBundles();
-    } finally {
-      _isLoadingBundles = false;
-      notifyListeners();
     }
+    if (bundlesToAdd.isNotEmpty) {
+      print("Adding ${bundlesToAdd.length} new bundles: $bundlesToAdd");
+      for (var bundle in bundlesToAdd) {
+        await _databaseHelper.insertBundle(bundle);
+      }
+    }
+
+    // 4. REFRESH THE UI AND SAVE STATE
+    _serverBundles = await _databaseHelper.getActiveLocalBundles();
+    await _saveBundlesToPrefs(_serverBundles);
+    print('Successfully synced bundles with server. Final count: ${_serverBundles.length}');
+
+  } catch (e) {
+    _errorMessage = 'Failed to sync with server. Showing local data: ${e.toString()}';
+    print('Error syncing with server, using local data: $e');
+    // On error, still show whatever is in the local DB.
+    _serverBundles = await _databaseHelper.getActiveLocalBundles();
+  } finally {
+    _isLoadingBundles = false;
+    notifyListeners();
   }
+}
+
+
+
 
   // The original fetchServerBundles is now replaced by the logic in fetchAndSyncBundles
   Future<void> fetchServerBundles() async {
@@ -560,21 +887,22 @@ class DataProvider with ChangeNotifier {
     'Soegaon': 'chhatrapati-sambhajinagar',
   };
 
-Future<void> completeBundleForTaluka(String taluka) async {
+  Future<void> completeBundleForTaluka(String taluka) async {
     try {
       // 1. Simply call the ApiService. Let it handle the details.
       await _apiService.completeBundleForTaluka(taluka);
 
       // 2. Refresh the local data after the API call is successful
       await refreshLocalBundles();
-      print('Successfully completed bundle for $taluka and refreshed local data.');
-
+      print(
+          'Successfully completed bundle for $taluka and refreshed local data.');
     } catch (e) {
       print('Error in DataProvider during completeBundle: $e');
       // Optionally, show an error message to the user here
       rethrow;
     }
   }
+
 // 1. First, let's add a method to get the highest sequence number for a taluka
   Future<int> _getHighestSequenceNumberForTaluka(String taluka) async {
     try {

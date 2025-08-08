@@ -705,4 +705,28 @@ class DatabaseHelper {
       return false;
     }
   }
+
+Future<void> deleteStaleBundles(List<int> bundleNosToDelete) async {
+  if (bundleNosToDelete.isEmpty) {
+    return; // Nothing to do
+  }
+  
+  // This is the correct way to get the database instance,
+  // matching all other functions in your file.
+  final db = await database;
+
+  try {
+    // Use a 'WHERE IN' clause to delete multiple bundles in a single command.
+    await db.delete(
+      'bundles',
+      where: 'bundleNo IN (${List.filled(bundleNosToDelete.length, '?').join(',')})',
+      whereArgs: bundleNosToDelete,
+    );
+    
+    print('Deleted ${bundleNosToDelete.length} stale bundles from local DB.');
+  } catch (e) {
+    print('Error deleting stale bundles: $e');
+    rethrow; // Pass the error up
+  }
+}
 }

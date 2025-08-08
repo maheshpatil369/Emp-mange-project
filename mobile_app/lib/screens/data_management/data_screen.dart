@@ -751,6 +751,7 @@ class _DataScreenState extends State<DataScreen> {
           final dataProvider =
               Provider.of<DataProvider>(context, listen: false);
           await dataProvider.refreshLocalBundles(); // Use simple local refresh
+          await dataProvider.fetchServerBundles();
           await _loadTempRecords();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1198,7 +1199,7 @@ class _DataScreenState extends State<DataScreen> {
                       //   ),
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                         duration: const Duration(seconds: 2), // ⏱ Timer added
+                          duration: const Duration(seconds: 2), // ⏱ Timer added
                           backgroundColor: Colors.green,
                           content: RichText(
                             text: TextSpan(
@@ -1327,7 +1328,8 @@ class _DataScreenState extends State<DataScreen> {
                           const SnackBar(
                             content: Text('Record saved to temporary storage!'),
                             backgroundColor: Colors.green,
-                            duration: Duration(seconds: 1), // ⏱ Show for 1 second
+                            duration:
+                                Duration(seconds: 1), // ⏱ Show for 1 second
                           ),
                         );
                         // Clear the selected record after successful save
