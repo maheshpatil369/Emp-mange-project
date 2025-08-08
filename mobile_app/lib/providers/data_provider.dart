@@ -824,18 +824,19 @@ Future<void> fetchAndSyncBundles() async {
 
   // Hardcoded mappings for location and taluka abbreviations
   static const Map<String, String> _locationAbbreviations = {
-    'ahilyanagar': 'AN',
+    'ahilyanagar': 'AH',
     'chhatrapati-sambhajinagar': 'CS',
+    'palghar': 'PA',
   };
 
-  static const Map<String, String> _talukaAbbreviations = {
+static const Map<String, String> _talukaAbbreviations = {
     // Ahilyanagar talukas
     'Jamkhed': 'JA',
     'Karjat': 'KA',
     'Kopargaon': 'KO',
     'Nevasa': 'NE',
-    'Parner': 'PA',
-    'Pathardi': 'PT',
+    'Parner': 'PR',
+    'Pathardi': 'PA',
     'Rahata': 'RA',
     'Rahuri': 'RH',
     'Sangamner': 'SA',
@@ -847,14 +848,25 @@ Future<void> fetchAndSyncBundles() async {
 
     // Chhatrapati Sambhajinagar talukas
     'Aurangabad': 'AU',
+    'Chhatrapati Sambhajinagar': 'CS',
     'Gangapur': 'GA',
-    'Kannad': 'KN',
+    'Kannad': 'KA',
     'Khultabad': 'KH',
     'Paithan': 'PA',
     'Sillod': 'SI',
     'Vaijapur': 'VA',
     'Phulambri': 'PH',
     'Soegaon': 'SO',
+
+    // Palghar 
+    'Palghar': 'PA',
+    'Vada': 'VA',
+    'Dahanu': 'DA',
+    'Talasari': 'TA',
+    'Jawhar': 'JA',
+    'Mokhada': 'MO',
+    'Vikramgad': 'VI',
+    'Vasai': 'VS',
   };
 
   // Hardcoded fallback mapping for taluka to location slug (used in offline mode)
@@ -885,8 +897,18 @@ Future<void> fetchAndSyncBundles() async {
     'Vaijapur': 'chhatrapati-sambhajinagar',
     'Phulambri': 'chhatrapati-sambhajinagar',
     'Soegaon': 'chhatrapati-sambhajinagar',
-  };
 
+
+     // Palghar talukas
+    'Palghar': 'palghar',
+    'Vada': 'palghar',
+    'Dahanu': 'palghar',
+    'Talasari': 'palghar',  
+    'Jawhar': 'palghar',
+    'Mokhada': 'palghar',
+    'Vikramgad': 'palghar',
+    'Vasai': 'palghar',
+  };
   Future<void> completeBundleForTaluka(String taluka) async {
     try {
       // 1. Simply call the ApiService. Let it handle the details.
