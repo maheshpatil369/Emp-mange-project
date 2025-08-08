@@ -14,37 +14,30 @@ export const uploadFile = async (
 ): Promise<Response> => {
   try {
     if (!req.file) {
-      return res
-        .status(400)
-        .json({ message: "Bad Request: No file uploaded." });
+      return res.status(400).json({ message: "Bad Request: No file uploaded." });
     }
 
     const location = req.params.location;
-    const BATCH_SIZE = 20000; // You can adjust this size as needed
+    const BATCH_SIZE = 20000; // Adjust if needed
 
-    // 1. Create the metadata record first to get a fileId
+    // 1. Create file metadata to get fileId
     const fileMetadata = {
       name: req.file.originalname,
       size: req.file.size,
-      location: location,
+      location,
       uploadDate: new Date().toISOString(),
     };
 
-    const fileId = await firebaseService.createFileMetadataInDB(
-      location as string,
-      fileMetadata
-    );
+    const fileId = await firebaseService.createFileMetadataInDB(location as string, fileMetadata);
 
-    // 2. Parse the entire Excel file into an in-memory array
+    // 2. Parse Excel into an array of objects
     const workbook = new ExcelJS.Workbook();
     const stream = Readable.from(req.file.buffer);
     await workbook.xlsx.read(stream);
 
     const worksheet = workbook.worksheets[0];
     if (!worksheet) {
-      return res
-        .status(400)
-        .json({ message: "Bad Request: No worksheet found in the file." });
+      return res.status(400).json({ message: "Bad Request: No worksheet found in the file." });
     }
 
     const headers = (worksheet.getRow(1).values as string[]).filter(Boolean);
@@ -52,7 +45,6 @@ export const uploadFile = async (
 
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber > 1) {
-        // Skip header row
         const rowData: { [key: string]: any } = {};
         const values = row.values as any[];
         headers.forEach((header, index) => {
@@ -60,38 +52,29 @@ export const uploadFile = async (
           rowData[header] =
             cellValue !== undefined && cellValue !== null ? cellValue : null;
         });
-
         if (Object.values(rowData).some((v) => v !== null)) {
           allRows.push(rowData);
         }
       }
     });
 
-    // 3. Upload the data in batches
-    const uploadPromises = [];
+    // 3. Upload data in batches
     for (let i = 0; i < allRows.length; i += BATCH_SIZE) {
       const batch = allRows.slice(i, i + BATCH_SIZE);
-      // Add the promise for this batch upload to our array
-      uploadPromises.push(
-        firebaseService.saveContentBatchToDB(location as string, fileId, batch)
-      );
+      await firebaseService.saveContentBatchToDB(location as string, fileId, batch);
     }
-
-    // Wait for all batch uploads to complete
-    await Promise.all(uploadPromises);
 
     return res.status(201).json({
       message: `File uploaded successfully for ${location}.`,
-      fileId: fileId,
+      fileId,
       recordsParsed: allRows.length,
     });
   } catch (error) {
     console.error("Error uploading file in batches:", error);
-    return res
-      .status(500)
-      .json({ message: "Internal Server Error: Could not process file." });
+    return res.status(500).json({ message: "Internal Server Error: Could not process file." });
   }
 };
+
 
 /**
  * Controller to get a list of uploaded file names for a location.

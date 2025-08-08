@@ -96,21 +96,29 @@ export async function saveContentBatchToDB(
 ): Promise<void> {
   const db = admin.database();
   const contentRef = db.ref(`files/${location}/${fileId}/content`);
+
+  // Get current content length to continue numbering
+  const snapshot = await contentRef.once('value');
+  const existingData = snapshot.val();
+  let startIndex = 0;
+
+  if (Array.isArray(existingData)) {
+    startIndex = existingData.length;
+  } else if (existingData && typeof existingData === 'object') {
+    startIndex = Object.keys(existingData).length;
+  }
+
   const updates: { [key: string]: any } = {};
 
-  // Generate a unique key for each record in the batch and prepare the update object
-  batch.forEach((record) => {
-    const newRecordKey = contentRef.push().key; // Generate a unique key
-    if (newRecordKey) {
-      updates[newRecordKey] = record;
-    }
+  batch.forEach((record, index) => {
+    updates[startIndex + index] = record;
   });
 
-  // Perform a single multi-path update for the entire batch
   if (Object.keys(updates).length > 0) {
     await contentRef.update(updates);
   }
 }
+
 
 /**
  * Fetches a single user's profile from the database.

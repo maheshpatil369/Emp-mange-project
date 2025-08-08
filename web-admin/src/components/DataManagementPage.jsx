@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate, useParams, Outlet } from "react-router-dom";
 import {
   ChevronRight,
@@ -177,6 +177,8 @@ export const LocationFileManagement = () => {
   const [error, setError] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -222,6 +224,29 @@ export const LocationFileManagement = () => {
       toast.error(err.response?.data?.message || "Failed to delete file.");
     }
   };
+
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setSelectedFile(e.dataTransfer.files[0]);
+      e.dataTransfer.clearData();
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
 
   const renderTableContent = () => {
     if (loading) {
@@ -288,13 +313,35 @@ export const LocationFileManagement = () => {
         title="Upload New File"
         description="Upload a new Excel data file for this location."
       >
-        <div className="flex items-center space-x-4">
+        <div
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer transition ${
+            isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
+          }`}
+        >
           <input
             key={selectedFile ? "file-selected" : "no-file"}
             type="file"
-            onChange={(e) => setSelectedFile(e.target.files[0])}
-            className="flex-1 text-sm text-gray-600 border border-gray-300 rounded-lg p-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 transition"
+            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+            className="hidden"
+            id="fileInput"
           />
+          <label
+            htmlFor="fileInput"
+            className="flex flex-col items-center space-y-2"
+          >
+            <UploadCloud className="w-8 h-8 text-gray-500" />
+            <span className="text-sm text-gray-600">
+              {selectedFile
+                ? `Selected: ${selectedFile.name}`
+                : "Drag & drop your file here, or click to browse"}
+            </span>
+          </label>
+        </div>
+
+        <div className="flex justify-end mt-4">
           <button
             onClick={handleUpload}
             disabled={!selectedFile || uploading}
