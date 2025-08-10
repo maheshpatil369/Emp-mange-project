@@ -789,7 +789,7 @@ export async function markBundleAsCompleteInDB(
   updates[`${recordPath}/userCompletedAt`] = new Date().toISOString();
 
   // 2. Remove the bundle from the user's active state
-  // updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
+  updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
 
   // Apply all changes in a single atomic operation
   await db.ref().update(updates);
