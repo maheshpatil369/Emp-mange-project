@@ -49,10 +49,3 @@ Make sure you have the following installed:
 ### **1️⃣ Clone the Repository**
 ```bash
 git clone https://github.com/your_username/emp-mange-project.git
-
-
-
----
-
-If you want, I can also **add badges (tech stack, license, version)** and **a project architecture diagram** so your README looks like a top GitHub project. That will make it stand out.  
-Do you want me to prepare that enhanced version?
