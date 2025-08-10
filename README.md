@@ -1,17 +1,17 @@
-# Employee Management System
+# 🌾 FarmSync – Farmer & Crop Management System
 
-A comprehensive, full-stack **Employee Management System** designed to streamline HR processes and improve data accessibility for both administrators and employees.
+A comprehensive, full-stack **Farmer & Crop Management System** designed to streamline agricultural data management, improve decision-making, and enhance accessibility for farmers and administrators.
 
 ---
 
 ## 📌 About The Project
 
-This project provides a complete solution for managing employee information, from initial data entry to mobile access.  
-It includes:
+This platform provides a complete solution for managing **farmer profiles**, **crop details**, **seasonal yields**, and **agricultural insights**.  
+It features:
 
-- **Web-based Admin Panel** for managing employee data.
-- **Robust Backend** to handle business logic and data processing.
-- **Mobile Application** for employees to view their profiles, check status, and receive updates.
+- **Web-based Admin Panel** to manage farmer and crop data.
+- **Robust Backend** to handle business logic and analytics.
+- **Mobile Application** for farmers to view information and get updates.
 
 ---
 
@@ -38,7 +38,7 @@ Follow these steps to run the project locally.
 
 ### ✅ Prerequisites
 
-Make sure you have the following installed:
+Make sure you have installed:
 - [Node.js](https://nodejs.org/en/download/)
 - [Flutter](https://flutter.dev/docs/get-started/install)
 
@@ -48,4 +48,4 @@ Make sure you have the following installed:
 
 ### **1️⃣ Clone the Repository**
 ```bash
-git clone https://github.com/your_username/emp-mange-project.git
+git clone https://github.com/your_username/farm-crop-management.git
