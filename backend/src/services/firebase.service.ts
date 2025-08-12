@@ -665,7 +665,9 @@ export async function saveProcessedRecordsToDB(
       if (snapshot.exists()) {
         isDuplicate = true;
         const originalRecordId = snapshot.val();
-        logger.warn(`Duplicate in DB for Intimation No: ${intimationNo}. Original ID: ${originalRecordId}`);
+        logger.warn(
+          `Duplicate in DB for Intimation No: ${intimationNo}. Original ID: ${originalRecordId}`
+        );
       }
 
       seenInThisBatch.add(intimationNo);
@@ -1319,6 +1321,8 @@ export async function getAnalyticsDataFromDB(filters: {
   const userStatesData = userStatesSnapshot.val() || {};
   const duplicateRecordsData = duplicateRecordsSnapshot.val() || {};
 
+  // console.log("--- FULL USER STATES DATA ---", JSON.stringify(userStatesData, null, 2));
+
   // 2. PREPARE HELPER MAPS
   const usersList: User[] = Object.keys(usersData).map((key) => ({
     id: key,
@@ -1334,6 +1338,17 @@ export async function getAnalyticsDataFromDB(filters: {
         const activeBundle = userStatesData[userId].activeBundles[taluka];
         const uniqueBundleId = `${user.location}-${taluka}-${activeBundle.bundleNo}`;
         bundleToUserMap.set(uniqueBundleId, userId);
+      }
+    }
+  }
+
+  const bundleLocationMap = new Map();
+  for (const location in processedRecordsData) {
+    for (const taluka in processedRecordsData[location]) {
+      for (const bundleKey in processedRecordsData[location][taluka]) {
+        const bundleNo = parseInt(bundleKey.replace("bundle-", ""));
+        const lookupKey = `${taluka}-${bundleNo}`;
+        bundleLocationMap.set(lookupKey, location);
       }
     }
   }
@@ -1377,6 +1392,7 @@ export async function getAnalyticsDataFromDB(filters: {
         if (activeUserId) {
           bundleUserName = userMap.get(activeUserId)?.name || "Unknown User";
         }
+
         // Strategy 2: Check for the permanently stored 'assignedTo' field.
         else if (bundleData.assignedTo) {
           bundleUserName =
@@ -1445,9 +1461,9 @@ export async function getAnalyticsDataFromDB(filters: {
             duplicateRecordsData[location][taluka][recordId];
           if (duplicateRecord) {
             totalDuplicates++;
-            if (duplicateRecord.submittedBy) {
-              duplicatesByUser[duplicateRecord.submittedBy] =
-                (duplicatesByUser[duplicateRecord.submittedBy] || 0) + 1;
+            if (duplicateRecord.processedBy) {
+              duplicatesByUser[duplicateRecord.processedBy] =
+                (duplicatesByUser[duplicateRecord.processedBy] || 0) + 1;
             }
           }
         }
@@ -1489,17 +1505,30 @@ export async function getAnalyticsDataFromDB(filters: {
       (b) => `${b.location}-${b.taluka}-${b.bundleNo}`
     )
   );
+  // MODIFIED 'userStates' loop
   for (const userId in userStatesData) {
     const user = userMap.get(userId);
     if (user && userStatesData[userId].activeBundles) {
       for (const taluka in userStatesData[userId].activeBundles) {
         const activeBundle = userStatesData[userId].activeBundles[taluka];
-        const uniqueBundleId = `${user.location}-${taluka}-${activeBundle.bundleNo}`;
+
+        // --- Start of new logic ---
+        // 1. Find the bundle's true location from our new map
+        const lookupKey = `${taluka}-${activeBundle.bundleNo}`;
+        const trueLocation = bundleLocationMap.get(lookupKey);
+
+        // 2. If we found a true location, use it. If not, fall back to the user's location.
+        const finalLocation = trueLocation || user.location;
+
+        // 3. Build the correct ID to look up details
+        const uniqueBundleId = `${finalLocation}-${taluka}-${activeBundle.bundleNo}`;
+        // --- End of new logic ---
+
         if (!handledBundles.has(uniqueBundleId)) {
           const details = bundleDetailsMap.get(uniqueBundleId);
           bundleCompletionSummary.push({
             userName: user.name,
-            location: user.location,
+            location: finalLocation, // Use the final, corrected location
             taluka,
             bundleNo: activeBundle.bundleNo,
             recordsProcessed: details
@@ -1512,7 +1541,6 @@ export async function getAnalyticsDataFromDB(filters: {
       }
     }
   }
-
   const processingStatusByFile = Array.from(fileStatsMap.values()).map(
     (file) => ({
       ...file,
