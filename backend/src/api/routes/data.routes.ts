@@ -56,7 +56,7 @@ router.post("/bundles/assign", isAuthenticated, assignBundle);
 router.post(
   "/records/sync",
   isAuthenticated,
-  // rateLimitOnePerMinute,
+  rateLimitOnePerMinute,
   syncRecords
 );
 

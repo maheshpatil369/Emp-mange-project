@@ -600,16 +600,13 @@ export async function saveProcessedRecordsToDB(
   const db = admin.database();
 
   // --- VALIDATE ACTIVE BUNDLE ---
-  const activeBundleRef = db.ref(
-    `userStates/${userId}/activeBundles/${taluka}`
-  );
+  const activeBundleRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
   const activeBundleSnapshot = await activeBundleRef.once("value");
 
   if (!activeBundleSnapshot.exists()) {
-    throw new Error(
-      `User does not have an active bundle for taluka: ${taluka}.`
-    );
+    throw new Error(`User does not have an active bundle for taluka: ${taluka}.`);
   }
+
   const activeBundleData = activeBundleSnapshot.val();
   if (Number(activeBundleData.bundleNo) !== Number(bundleNo)) {
     throw new Error(
@@ -617,28 +614,22 @@ export async function saveProcessedRecordsToDB(
     );
   }
 
-  // --- VALIDATION CHECKS ---
   if (records.length > 250) {
     throw new Error("Cannot sync more than 250 records at a time.");
   }
 
   const updates: { [key: string]: any } = {};
-  const seenInThisBatch = new Set();
+  const seenIntimationNos = new Set<string>();
+  let countToIncrement = 0;
 
   for (const record of records) {
     // --- FIND UNIQUE ID ---
     const uniqueIdKey = Object.keys(record).find(
-      (k) =>
-        k
-          .trim()
-          .toLowerCase()
-          .replace(/[\s_-]/g, "") === "uniqueid"
+      (k) => k.trim().toLowerCase().replace(/[\s_-]/g, "") === "uniqueid"
     );
 
     if (!uniqueIdKey || !record[uniqueIdKey]) {
-      logger.error("A record in the batch is missing its unique ID.", {
-        record,
-      });
+      logger.error("A record in the batch is missing its unique ID.", { record });
       throw new Error(`A record in the batch is missing its unique ID.`);
     }
     const uniqueId = record[uniqueIdKey];
@@ -651,36 +642,33 @@ export async function saveProcessedRecordsToDB(
     const intimationNo = intimationNoKey ? record[intimationNoKey] : null;
 
     if (intimationNo) {
-      // Within-batch duplicate
-      if (seenInThisBatch.has(intimationNo)) {
+      if (seenIntimationNos.has(intimationNo)) {
         isDuplicate = true;
-        logger.warn(
-          `Duplicate within batch for Intimation No: ${intimationNo}.`
-        );
+        logger.warn(`Duplicate within batch for Intimation No: ${intimationNo}.`);
+      } else {
+        seenIntimationNos.add(intimationNo);
       }
 
-      // DB duplicate check
-      const indexRef = db.ref(`/intimationNoIndex/${intimationNo}`);
-      const snapshot = await indexRef.once("value");
-      if (snapshot.exists()) {
-        isDuplicate = true;
-        const originalRecordId = snapshot.val();
-        logger.warn(
-          `Duplicate in DB for Intimation No: ${intimationNo}. Original ID: ${originalRecordId}`
-        );
+      if (!isDuplicate) {
+        const snapshot = await db.ref(`/intimationNoIndex/${intimationNo}`).once("value");
+        if (snapshot.exists()) {
+          isDuplicate = true;
+          const originalRecordId = snapshot.val();
+          logger.warn(
+            `Duplicate in DB for Intimation No: ${intimationNo}. Original ID: ${originalRecordId}`
+          );
+        }
       }
-
-      seenInThisBatch.add(intimationNo);
     }
 
     // --- PREPARE RECORD ---
     const newRecord: ProcessedRecord = {
       ...record,
-      bundleNo: bundleNo,
+      bundleNo,
       processedBy: userId,
       processedAt: new Date().toISOString(),
-      sourceFile: sourceFile,
-      taluka: taluka,
+      sourceFile,
+      taluka,
     };
 
     // Always save to processedRecords
@@ -689,11 +677,10 @@ export async function saveProcessedRecordsToDB(
 
     // Maintain intimationNo index
     if (intimationNo) {
-      const indexPath = `/intimationNoIndex/${intimationNo}`;
-      updates[indexPath] = uniqueId;
+      updates[`/intimationNoIndex/${intimationNo}`] = uniqueId;
     }
 
-    // If duplicate, also save to duplicateRecords
+    // Save duplicates separately
     if (isDuplicate) {
       const duplicatesRef = db.ref(`/duplicateRecords/${location}/${taluka}`);
       const newDuplicateKey = duplicatesRef.push().key;
@@ -701,6 +688,12 @@ export async function saveProcessedRecordsToDB(
         ...newRecord,
         reason: "Duplicate record",
       };
+    }
+
+    // --- COUNT PROTECTION: Only count if not already in processedRecords ---
+    const existingRecordSnap = await db.ref(recordPath).once("value");
+    if (!existingRecordSnap.exists()) {
+      countToIncrement++;
     }
   }
 
@@ -710,18 +703,18 @@ export async function saveProcessedRecordsToDB(
   }
 
   // --- INCREMENT USER'S BUNDLE COUNT ---
-  const newRecordsCount = records.length;
-  if (newRecordsCount > 0) {
+  if (countToIncrement > 0) {
     const userStateCountRef = db.ref(
       `userStates/${userId}/activeBundles/${taluka}/count`
     );
     await userStateCountRef.set(
-      admin.database.ServerValue.increment(newRecordsCount)
+      admin.database.ServerValue.increment(countToIncrement)
     );
   } else {
-    logger.info("No new records to save in this batch.");
+    logger.info("No new unique records to increase count for.");
   }
 }
+
 
 /**
  * Fetches all saved duplicate records for a given location.
