@@ -600,11 +600,15 @@ export async function saveProcessedRecordsToDB(
   const db = admin.database();
 
   // --- VALIDATE ACTIVE BUNDLE ---
-  const activeBundleRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
+  const activeBundleRef = db.ref(
+    `userStates/${userId}/activeBundles/${taluka}`
+  );
   const activeBundleSnapshot = await activeBundleRef.once("value");
 
   if (!activeBundleSnapshot.exists()) {
-    throw new Error(`User does not have an active bundle for taluka: ${taluka}.`);
+    throw new Error(
+      `User does not have an active bundle for taluka: ${taluka}.`
+    );
   }
 
   const activeBundleData = activeBundleSnapshot.val();
@@ -625,11 +629,17 @@ export async function saveProcessedRecordsToDB(
   for (const record of records) {
     // --- FIND UNIQUE ID ---
     const uniqueIdKey = Object.keys(record).find(
-      (k) => k.trim().toLowerCase().replace(/[\s_-]/g, "") === "uniqueid"
+      (k) =>
+        k
+          .trim()
+          .toLowerCase()
+          .replace(/[\s_-]/g, "") === "uniqueid"
     );
 
     if (!uniqueIdKey || !record[uniqueIdKey]) {
-      logger.error("A record in the batch is missing its unique ID.", { record });
+      logger.error("A record in the batch is missing its unique ID.", {
+        record,
+      });
       throw new Error(`A record in the batch is missing its unique ID.`);
     }
     const uniqueId = record[uniqueIdKey];
@@ -644,13 +654,17 @@ export async function saveProcessedRecordsToDB(
     if (intimationNo) {
       if (seenIntimationNos.has(intimationNo)) {
         isDuplicate = true;
-        logger.warn(`Duplicate within batch for Intimation No: ${intimationNo}.`);
+        logger.warn(
+          `Duplicate within batch for Intimation No: ${intimationNo}.`
+        );
       } else {
         seenIntimationNos.add(intimationNo);
       }
 
       if (!isDuplicate) {
-        const snapshot = await db.ref(`/intimationNoIndex/${intimationNo}`).once("value");
+        const snapshot = await db
+          .ref(`/intimationNoIndex/${intimationNo}`)
+          .once("value");
         if (snapshot.exists()) {
           isDuplicate = true;
           const originalRecordId = snapshot.val();
@@ -715,7 +729,6 @@ export async function saveProcessedRecordsToDB(
   }
 }
 
-
 /**
  * Fetches all saved duplicate records for a given location.
  * @param location - The location slug (e.g., "akola").
@@ -759,13 +772,12 @@ export async function markBundleAsCompleteInDB(
   const db = admin.database();
   const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
 
-  // First, find the active bundle to get its number and the user's location
+  // --- Step 1: Get active bundle ---
   const activeBundleSnapshot = await userStateRef.once("value");
   if (!activeBundleSnapshot.exists()) {
-    throw new Error(
-      `No active bundle found for user in taluka ${taluka} to mark as complete.`
-    );
+    throw new Error(`No active bundle found for user in taluka ${taluka}.`);
   }
+
   const activeBundle: ActiveBundle = activeBundleSnapshot.val();
   const bundleNo = activeBundle.bundleNo;
 
@@ -775,19 +787,33 @@ export async function markBundleAsCompleteInDB(
   }
   const location = user.location;
 
-  // Prepare a multi-path update
+  // --- Step 2: Mark completion in processedRecords ---
   const updates: { [key: string]: any } = {};
-
-  // 1. Add a flag to the processedRecords path to mark this bundle as completed by the user
   const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}`;
   updates[`${recordPath}/isUserCompleted`] = true;
   updates[`${recordPath}/userCompletedAt`] = new Date().toISOString();
 
-  // 2. Remove the bundle from the user's active state
-  updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
-
-  // Apply all changes in a single atomic operation
   await db.ref().update(updates);
+
+  // --- Step 3: Delete active bundle atomically ---
+  await userStateRef.transaction((currentData) => {
+    if (currentData && currentData.bundleNo === bundleNo) {
+      return null; // delete
+    }
+    return currentData; // don't touch if bundle changed
+  });
+
+  // --- Step 4: Verify deletion ---
+  const verifySnap = await userStateRef.once("value");
+  if (verifySnap.exists()) {
+    throw new Error(
+      `Failed to delete active bundle for user ${userId} in taluka ${taluka}.`
+    );
+  }
+
+  logger.info(
+    `Bundle #${bundleNo} for taluka ${taluka} marked complete and removed for user ${userId}.`
+  );
 }
 
 /**
