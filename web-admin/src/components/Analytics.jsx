@@ -179,12 +179,12 @@ const AnalyticsPage = () => {
           value={stats?.pdfRequired}
           color="text-red-500"
         />
-        <StatCard
+        {/* <StatCard
           icon={<CopyX />}
           title="Duplicates"
           value={stats?.totalDuplicates}
           color="text-purple-500"
-        />
+        /> */}
         <StatCard
           icon={<Users />}
           title="Users"
@@ -207,9 +207,9 @@ const AnalyticsPage = () => {
         </AnalyticsCard>
         <FileStatusSection data={analytics?.processingStatusByFile} />
         <UserLeaderboardSection data={analytics?.userLeaderboard} />
-        <DuplicateLeaderboardSection
+        {/* <DuplicateLeaderboardSection
           data={analytics?.duplicateStats?.duplicateLeaderboard}
-        />
+        /> */}
         <BundleCompletionSummary
           data={analytics?.bundleCompletionSummary}
           config={config}
