@@ -200,13 +200,23 @@ const AnalyticsPage = () => {
         <br />
         <StatCard
           icon={<CheckSquare className="text-green-500" />} // ✅ Completion checkmark
-          title="Today Processed Records"
+          title="Today's Processed Records"
           value={stats?.todayProcessedRecords}
         />
         <StatCard
           icon={<FileTextIcon className="text-blue-500" />} // 📄 Document icon for PDFs
-          title="Today PDF Required"
+          title="Today's PDF Required"
           value={stats?.todayPdfRequired}
+        />
+        <StatCard
+          icon={<CheckSquare className="text-green-500" />} // ✅ Completion checkmark
+          title="Yesterday's Processed Records"
+          value={stats?.yesterdayProcessedRecords}
+        />
+        <StatCard
+          icon={<FileTextIcon className="text-blue-500" />} // 📄 Document icon for PDFs
+          title="Yesterday's PDF Required"
+          value={stats?.yesterdayPdfRequired}
         />
       </div>
 

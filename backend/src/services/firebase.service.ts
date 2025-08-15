@@ -1307,6 +1307,15 @@ export async function getDashboardSummaryFromDB(): Promise<DashboardSummary> {
   };
 }
 
+const istOffset = 5.5 * 60 * 60 * 1000; // +5:30 IST offset
+
+function formatISTDate(date: Date) {
+  const istDate = new Date(date.getTime() + istOffset);
+  return `${istDate.getUTCFullYear()}-${String(
+    istDate.getUTCMonth() + 1
+  ).padStart(2, "0")}-${String(istDate.getUTCDate()).padStart(2, "0")}`;
+}
+
 /**
  * Gathers and computes all data needed for the entire Analytics page.
  * This is an expensive operation as it processes all data in the database.
@@ -1343,9 +1352,16 @@ export async function getAnalyticsDataFromDB(filters: {
   // Add these before the big `for (const location in processedRecordsData)` loop
   let todayProcessedRecords = 0;
   let todayPdfRequired = 0;
-  const todayDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD 
+  let yesterdayProcessedRecords = 0;
+  let yesterdayPdfRequired = 0;
 
-  // console.log("--- FULL USER STATES DATA ---", JSON.stringify(userStatesData, null, 2));
+  // Get IST date in YYYY-MM-DD format
+  // Always get IST date in YYYY-MM-DD format
+  const now = new Date();
+  const istDate = formatISTDate(now); // Today in IST
+
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 1 day back
+  const yesterdayISTDate = formatISTDate(yesterday);
 
   // 2. PREPARE HELPER MAPS
   const usersList: User[] = Object.keys(usersData).map((key) => ({
@@ -1429,10 +1445,17 @@ export async function getAnalyticsDataFromDB(filters: {
             completedRecords++;
             recordsByLocation[location]++;
 
-             if (record.processedAt) { // change to your actual date field name
-              const recordDate = new Date(record.processedAt).toISOString().split("T")[0];
-              if (recordDate === todayDate) {
+            if (record.processedAt) {
+              const recordDateIST = formatISTDate(new Date(record.processedAt));
+
+              // ✅ Today
+              if (recordDateIST === istDate) {
                 todayProcessedRecords++;
+              }
+
+              // ✅ Yesterday
+              if (recordDateIST === yesterdayISTDate) {
+                yesterdayProcessedRecords++;
               }
             }
 
@@ -1453,10 +1476,19 @@ export async function getAnalyticsDataFromDB(filters: {
             ) {
               pdfRequired++;
 
-               if (record.processedAt) {
-                const recordDate = new Date(record.processedAt).toISOString().split("T")[0];
-                if (recordDate === todayDate) {
+              if (record.processedAt) {
+                const recordDateIST = formatISTDate(
+                  new Date(record.processedAt)
+                );
+
+                // ✅ Today
+                if (recordDateIST === istDate) {
                   todayPdfRequired++;
+                }
+
+                // ✅ Yesterday
+                if (recordDateIST === yesterdayISTDate) {
+                  yesterdayPdfRequired++;
                 }
               }
 
@@ -1536,7 +1568,9 @@ export async function getAnalyticsDataFromDB(filters: {
     pdfRequired,
     totalDuplicates,
     todayProcessedRecords,
-    todayPdfRequired
+    todayPdfRequired,
+    yesterdayProcessedRecords,
+    yesterdayPdfRequired
   };
 
   let bundleCompletionSummary = Array.from(bundleDetailsMap.values()).filter(
@@ -1624,7 +1658,6 @@ export async function getAnalyticsDataFromDB(filters: {
     duplicateStats,
   };
 }
-
 
 /**
  * Fetches a single uploaded file by its ID for a specific location.
