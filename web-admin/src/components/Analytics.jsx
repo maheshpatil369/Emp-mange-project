@@ -29,6 +29,8 @@ import {
   Filter,
   Table,
   AreaChart,
+  FileTextIcon,
+  CheckSquare,
 } from "lucide-react";
 import apiClient from "../lib/axios";
 
@@ -194,6 +196,17 @@ const AnalyticsPage = () => {
           icon={<Package />}
           title="Active Bundles"
           value={stats?.activeBundles}
+        />
+        <br />
+        <StatCard
+          icon={<CheckSquare className="text-green-500" />} // ✅ Completion checkmark
+          title="Today Processed Records"
+          value={stats?.todayProcessedRecords}
+        />
+        <StatCard
+          icon={<FileTextIcon className="text-blue-500" />} // 📄 Document icon for PDFs
+          title="Today PDF Required"
+          value={stats?.todayPdfRequired}
         />
       </div>
 

@@ -1340,6 +1340,11 @@ export async function getAnalyticsDataFromDB(filters: {
   const userStatesData = userStatesSnapshot.val() || {};
   const duplicateRecordsData = duplicateRecordsSnapshot.val() || {};
 
+  // Add these before the big `for (const location in processedRecordsData)` loop
+  let todayProcessedRecords = 0;
+  let todayPdfRequired = 0;
+  const todayDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD 
+
   // console.log("--- FULL USER STATES DATA ---", JSON.stringify(userStatesData, null, 2));
 
   // 2. PREPARE HELPER MAPS
@@ -1423,6 +1428,14 @@ export async function getAnalyticsDataFromDB(filters: {
           if (record && typeof record === "object") {
             completedRecords++;
             recordsByLocation[location]++;
+
+             if (record.processedAt) { // change to your actual date field name
+              const recordDate = new Date(record.processedAt).toISOString().split("T")[0];
+              if (recordDate === todayDate) {
+                todayProcessedRecords++;
+              }
+            }
+
             if (record.processedBy) {
               userRecordCounts[record.processedBy] =
                 (userRecordCounts[record.processedBy] || 0) + 1;
@@ -1439,6 +1452,14 @@ export async function getAnalyticsDataFromDB(filters: {
               record[pdfKey].toLowerCase() === "yes"
             ) {
               pdfRequired++;
+
+               if (record.processedAt) {
+                const recordDate = new Date(record.processedAt).toISOString().split("T")[0];
+                if (recordDate === todayDate) {
+                  todayPdfRequired++;
+                }
+              }
+
               pdfsInThisBundle++;
             }
             recordsInThisBundle++;
@@ -1514,6 +1535,8 @@ export async function getAnalyticsDataFromDB(filters: {
     ),
     pdfRequired,
     totalDuplicates,
+    todayProcessedRecords,
+    todayPdfRequired
   };
 
   let bundleCompletionSummary = Array.from(bundleDetailsMap.values()).filter(
@@ -1601,6 +1624,7 @@ export async function getAnalyticsDataFromDB(filters: {
     duplicateStats,
   };
 }
+
 
 /**
  * Fetches a single uploaded file by its ID for a specific location.
