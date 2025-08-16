@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
   BarChart,
   Bar,
@@ -22,14 +22,15 @@ import {
   Package,
   AlertTriangle,
   FileWarning,
-  Inbox,
+  RefreshCw,
   TrendingUp,
   MapPin,
   PieChart as PieIcon,
 } from "lucide-react";
+
 import apiClient from "../lib/axios";
 
-// --- Reusable UI Components ---
+// --- Reusable UI Components (No changes here) ---
 
 const DashboardCard = ({ icon, title, children, className = "" }) => (
   <div
@@ -86,27 +87,64 @@ const DashboardPage = () => {
   const [analyticsData, setAnalyticsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isRecalculating, setIsRecalculating] = useState(false);
+
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get(
+        "/admin/analytics/dashboard-summary"
+      );
+      setAnalyticsData(response.data);
+    } catch (err) {
+      setError("Could not load dashboard data. Please try again later.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchAnalytics = async () => {
-      try {
-        setLoading(true);
-        // Updated to use your confirmed API endpoint
-        const response = await apiClient.get(
-          "/admin/analytics/dashboard-summary"
-        );
-        setAnalyticsData(response.data);
-      } catch (err) {
-        setError("Could not load dashboard data. Please try again later.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchAnalytics();
   }, []);
 
-  if (loading) {
+  const handleRecalculation = async () => {
+    const password = window.prompt(
+      "This is a sensitive operation. Please enter the admin password to continue:"
+    );
+
+    // --- 1. Check if the user cancelled or entered nothing ---
+    if (password === null) {
+      return; // User clicked "Cancel"
+    }
+
+    // --- 2. Set your secure password here ---
+    const CORRECT_PASSWORD = import.meta.env.VITE_RECALCULATE_PASSWORD;
+
+    // --- 3. Validate the password ---
+    if (password !== CORRECT_PASSWORD) {
+      alert("Incorrect password. Aborting operation.");
+      return;
+    }
+
+    setIsRecalculating(true);
+    try {
+      await apiClient.post("/admin/analytics/recalculate");
+      alert(
+        "Recalculation completed successfully! The dashboard will now refresh."
+      );
+      fetchAnalytics(); // Refresh the data
+    } catch (err) {
+      alert(
+        "Failed to start recalculation. Please check the browser console for errors."
+      );
+      console.error("Recalculation trigger error:", err);
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
+  if (loading && !analyticsData) {
     return <DashboardPageSkeleton />;
   }
 
@@ -118,7 +156,6 @@ const DashboardPage = () => {
     );
   }
 
-  // Correctly map the data directly from the analyticsData object
   const {
     totalExcelRecords,
     completedRecords,
@@ -138,7 +175,19 @@ const DashboardPage = () => {
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-gray-50">
-      <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
+        <button
+          onClick={handleRecalculation}
+          disabled={isRecalculating}
+          className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition-colors"
+        >
+          <RefreshCw
+            className={`w-4 h-4 mr-2 ${isRecalculating ? "animate-spin" : ""}`}
+          />
+          {isRecalculating ? "Recalculating..." : "Recalculate Analytics"}
+        </button>
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard
@@ -173,9 +222,11 @@ const DashboardPage = () => {
       </div>
 
       <div className="space-y-6">
+        {/* Pass the data directly, as it's already formatted by the backend */}
         <ProgressChart data={recordsProcessedByDate} />
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3">
+            {/* Pass the data directly, no transformation needed */}
             <LocationChart data={recordsByLocation} />
           </div>
           <div className="lg:col-span-2">
@@ -187,7 +238,6 @@ const DashboardPage = () => {
   );
 };
 
-// --- Skeleton Component ---
 const DashboardPageSkeleton = () => (
   <div className="p-4 md:p-6 space-y-6 bg-gray-50 animate-pulse">
     <div className="h-9 w-64 bg-gray-300 rounded-md"></div>
@@ -207,34 +257,18 @@ const DashboardPageSkeleton = () => (
 // --- Chart Components ---
 
 const ProgressChart = ({ data }) => {
-  const processedData = useMemo(() => {
-    const dataMap = new Map(
-      (data || []).map((item) => [item.date, item.count])
-    );
-    const last7Days = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateString = d.toISOString().split("T")[0];
-
-      last7Days.push({
-        date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        count: dataMap.get(dateString) || 0,
-      });
-    }
-    return last7Days;
-  }, [data]);
-
+  // --- THIS COMPONENT IS NOW SIMPLIFIED ---
+  // No useMemo hook is needed because the backend sends the data ready for display.
   return (
     <DashboardCard
       icon={<TrendingUp size={24} />}
       title="Last 7 Days Processing Progress"
     >
-      {processedData.length > 0 ? (
+      {data && data.length > 0 ? (
         <div className="w-full h-80">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
-              data={processedData}
+              data={data} // Use the data prop directly
               margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
@@ -265,6 +299,7 @@ const ProgressChart = ({ data }) => {
 };
 
 const LocationChart = ({ data }) => (
+  // This component doesn't need any changes, it already expects the correct data format.
   <DashboardCard
     icon={<MapPin size={24} />}
     title="Processed Records by Location"
@@ -294,7 +329,7 @@ const LocationChart = ({ data }) => (
         </ResponsiveContainer>
       </div>
     ) : (
-      <EmptyState message="Please add 'recordsByLocation' to your API response to see this chart." />
+      <EmptyState message="No location data available to display." />
     )}
   </DashboardCard>
 );

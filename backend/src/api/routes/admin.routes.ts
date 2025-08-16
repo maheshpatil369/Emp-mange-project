@@ -12,6 +12,7 @@ import {
   resetAllProcessedData,
   resetUserProgress,
   searchRecordById,
+  triggerRecalculation,
 } from "../controllers/admin.controller";
 import { isAuthenticated, isAdmin } from "../middleware/auth.middleware";
 
@@ -44,6 +45,10 @@ router.get(
   isAdmin,
   exportDuplicateLog
 );
+
+
+// POST /api/admin/analytics/recalculate
+router.post('/analytics/recalculate',isAuthenticated, isAdmin, triggerRecalculation);
 
 // POST /api/admin/reset-progress
 router.post("/reset-progress", isAuthenticated, isAdmin, resetUserProgress);

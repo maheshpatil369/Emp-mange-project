@@ -38,7 +38,7 @@ export async function createUserInDB(userData: Omit<User, "id">) {
   });
 
   const db = admin.database();
-  const userProfileRef = db.ref(`users/${userRecord.uid}`);
+  const updates: { [key: string]: any } = {};
 
   const profileData = {
     name: userData.name,
@@ -50,7 +50,12 @@ export async function createUserInDB(userData: Omit<User, "id">) {
     canDownloadFiles: true,
   };
 
-  await userProfileRef.set(profileData);
+  // Set user profile and increment user count atomically
+  updates[`/users/${userRecord.uid}`] = profileData;
+  updates[`/analytics/topLevelStats/registeredUsers`] =
+    admin.database.ServerValue.increment(1);
+
+  await db.ref().update(updates);
   return userRecord;
 }
 
@@ -77,7 +82,18 @@ export async function createFileMetadataInDB(
     // Note: The 'content' is intentionally omitted here
   };
 
-  await newFileRef.set(dataToSave);
+  const updates: { [key: string]: any } = {};
+
+  // 1. Set the new file's metadata
+  updates[`/files/${location}/${newFileRef.key}`] = dataToSave;
+
+  const recordCount = fileMetadata.contentLength || 0;
+  updates[`/analytics/topLevelStats/totalExcelRecords`] =
+    admin.database.ServerValue.increment(recordCount);
+  updates[`/analytics/topLevelStats/pendingRecords`] =
+    admin.database.ServerValue.increment(recordCount);
+
+  await db.ref().update(updates);
 
   return newFileRef.key!;
 }
@@ -137,15 +153,27 @@ export async function getUserFromDB(userId: string): Promise<User | null> {
 
 export async function updateUserInDB(userId: string, updates: Partial<User>) {
   const db = admin.database();
-  const userProfileRef = db.ref(`users/${userId}`);
 
-  // Update profile in Realtime Database
-  await userProfileRef.update(updates);
+  const atomicUpdates: { [key: string]: any } = {};
+
+  // Prepare to update the user's profile
+  atomicUpdates[`/users/${userId}`] = updates;
+
+  // Also prepare to update the user's name in the analytics leaderboard
+  if (updates.name) {
+    atomicUpdates[`/analytics/userLeaderboard/${userId}/userName`] =
+      updates.name;
+  }
+
+  // Atomically update the database
+  await db.ref().update(atomicUpdates);
 
   // Update corresponding data in Firebase Auth
-  await admin.auth().updateUser(userId, {
-    displayName: updates.name,
-  });
+  if (updates.name) {
+    await admin.auth().updateUser(userId, {
+      displayName: updates.name,
+    });
+  }
 }
 
 export const updateUserPermission = async (
@@ -163,8 +191,13 @@ export async function deleteUserInDB(userId: string) {
 
   // 2. Delete from Realtime Database
   const db = admin.database();
-  const userProfileRef = db.ref(`users/${userId}`);
-  await userProfileRef.remove();
+  const updates: { [key: string]: any } = {};
+
+  updates[`/users/${userId}`] = null;
+  updates[`/analytics/topLevelStats/registeredUsers`] =
+    admin.database.ServerValue.increment(-1);
+
+  await db.ref().update(updates);
 }
 
 export async function getFilesByLocationFromDB(
@@ -260,6 +293,9 @@ export async function assignNewBundleToUser(
     // 2. Mark this bundle as taken in the central registry
     updates[`assignedBundles/${location}/${taluka}/${assignedBundleNo}`] = true;
 
+    updates[`/analytics/topLevelStats/activeBundles`] =
+      admin.database.ServerValue.increment(1);
+
     await db.ref().update(updates);
 
     logger.info(
@@ -272,300 +308,6 @@ export async function assignNewBundleToUser(
     `Failed to find an available bundle after ${MAX_ATTEMPTS} attempts.`
   );
 }
-
-/**
- * Generates a unique ID prefix based on location and taluka names.
- * Example: "chhatrapati-sambhajinagar", "Paithan" -> "CSPA"
- * @param location - The location name.
- * @param taluka - The taluka name.
- * @returns A 4-letter prefix string.
- */
-// function generateIdPrefix(location: string, taluka: string): string {
-//   const locationPrefix = location.substring(0, 2).toUpperCase();
-//   const talukaPrefix = taluka.substring(0, 2).toUpperCase();
-//   return `${locationPrefix}${talukaPrefix}`;
-// }
-
-/**
- * Saves a batch of processed records to the database.
- * This function handles unique ID generation and batch writing.
- * @param userId - The UID of the user submitting the records.
- * @param location - The user's location slug.
- * @param taluka - The taluka the records belong to.
- * @param bundleNo - The bundle number for these records.
- * @param records - An array of records to save.
- * @param sourceFile - The name of the original file the data came from.
- */
-
-// export async function saveProcessedRecordsToDB(
-//   userId: string,
-//   location: string,
-//   taluka: string,
-//   bundleNo: number,
-//   records: any[],
-//   sourceFile: string
-// ): Promise<void> {
-//   const db = admin.database();
-
-//   // --- VALIDATION CHECKS ---
-//   if (records.length > 250) {
-//     throw new Error("Cannot sync more than 250 records at a time.");
-//   }
-
-//   // const recordsRef = db.ref(
-//   //   `processedRecords/${location}/${taluka}/bundle-${bundleNo}`
-//   // );
-
-//   // const snapshot = await recordsRef.once("value");
-//   // let currentRecordCount = 0;
-//   // if (snapshot.exists()) {
-//   //   const bundleData = snapshot.val();
-//   //   for (const key in bundleData) {
-//   //     if (bundleData[key] && typeof bundleData[key] === "object") {
-//   //       currentRecordCount++;
-//   //     }
-//   //   }
-//   // }
-
-//   // if (currentRecordCount >= 250) {
-//   //   throw new Error(`Bundle #${bundleNo} is already full and cannot accept new records.`);
-//   // }
-
-//   // const remainingCapacity = 250 - currentRecordCount;
-//   // if (records.length > remainingCapacity) {
-//   //   throw new Error(
-//   //     `Cannot add ${records.length} records. Bundle #${bundleNo} only has capacity for ${remainingCapacity} more records.`
-//   //   );
-//   // }
-
-//   const idCounterRef = db.ref(`idCounters/${location}/${taluka}`);
-//   const updates: { [key: string]: any } = {};
-//   let newRecordsCount = 0;
-//   const seenInThisBatch = new Set();
-//   const duplicateRecordsToSave: any[] = [];
-
-//   for (const record of records) {
-//     const intimationNoKey = Object.keys(record).find(
-//       (k) => k.trim().toLowerCase() === "intimation no"
-//     );
-//     const intimationNo = intimationNoKey ? record[intimationNoKey] : null;
-
-//     if (intimationNo) {
-//       // Check for duplicates within the current batch
-//       if (seenInThisBatch.has(intimationNo)) {
-//         logger.warn(`Duplicate within batch for Intimation No: ${intimationNo}.`);
-//         duplicateRecordsToSave.push({ ...record, reason: "Duplicate within same batch" });
-//         continue;
-//       }
-
-//       // Check for duplicates against the database index
-//       const indexRef = db.ref(`/intimationNoIndex/${intimationNo}`);
-//       const snapshot = await indexRef.once("value");
-
-//       if (snapshot.exists()) {
-//         logger.warn(`Duplicate in DB for Intimation No: ${intimationNo}.`);
-//         const originalRecordId = snapshot.val();
-//         duplicateRecordsToSave.push({ ...record, reason: `Duplicate of existing record: ${originalRecordId}` });
-//         continue;
-//       }
-//     }
-
-//     // If we reach here, the record is unique
-//     if (intimationNo) {
-//       seenInThisBatch.add(intimationNo);
-//     }
-
-//     // Generate a unique ID for the new record
-//     const { snapshot: idSnapshot } = await idCounterRef.transaction(
-//       (currentData: { lastId: number } | null) => {
-//         if (currentData === null) { return { lastId: 1 }; }
-//         currentData.lastId++;
-//         return currentData;
-//       }
-//     );
-
-//     const newId = idSnapshot.val().lastId;
-//     const prefix = generateIdPrefix(location, taluka);
-//     const uniqueId = `${prefix}${newId}`;
-
-//     // Prepare the new record to be saved
-//     const newRecord: ProcessedRecord = {
-//       ...record,
-//       uniqueId: uniqueId,
-//       bundleNo: bundleNo,
-//       processedBy: userId,
-//       processedAt: new Date().toISOString(),
-//       sourceFile: sourceFile,
-//       taluka: taluka,
-//     };
-
-//     // Add the new record and its index entry to the updates object
-//     const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}/${uniqueId}`;
-//     updates[recordPath] = newRecord;
-
-//     if (intimationNo) {
-//       const indexPath = `/intimationNoIndex/${intimationNo}`;
-//       updates[indexPath] = uniqueId; // Store the uniqueId in the index
-//     }
-
-//     newRecordsCount++;
-//   }
-
-//   // Process and prepare any found duplicates for saving
-//   if (duplicateRecordsToSave.length > 0) {
-//     const duplicatesRef = db.ref(`/duplicateRecords/${location}/${taluka}`);
-//     duplicateRecordsToSave.forEach(dup => {
-//       const newDuplicateKey = duplicatesRef.push().key;
-//       const duplicateData = {
-//         ...dup, // The full original data of the duplicate record
-//         submittedBy: userId,
-//         submittedAt: new Date().toISOString(),
-//         sourceBundleNo: bundleNo,
-//       };
-//       updates[`/duplicateRecords/${location}/${taluka}/${newDuplicateKey}`] = duplicateData;
-//     });
-//   }
-
-//   // Atomically save all unique records, index entries, and duplicate records
-//   if (Object.keys(updates).length > 0) {
-//     await db.ref().update(updates);
-//   }
-
-//   // If new unique records were saved, increment the user's active bundle count
-//   if (newRecordsCount > 0) {
-//     const userStateCountRef = db.ref(
-//       `userStates/${userId}/activeBundles/${taluka}/count`
-//     );
-//     await userStateCountRef.set(
-//       admin.database.ServerValue.increment(newRecordsCount)
-//     );
-//   } else {
-//     logger.info("No new unique records to save in this batch.");
-//   }
-// }
-
-// export async function saveProcessedRecordsToDB(
-//   userId: string,
-//   location: string,
-//   taluka: string,
-//   bundleNo: number,
-//   records: any[],
-//   sourceFile: string
-// ): Promise<void> {
-//   const db = admin.database();
-
-//   // --- VALIDATION CHECKS ---
-//   if (records.length > 250) {
-//     throw new Error("Cannot sync more than 250 records at a time.");
-//   }
-
-//   const idCounterRef = db.ref(`idCounters/${location}/${taluka}`);
-//   const updates: { [key: string]: any } = {};
-//   let newRecordsCount = 0;
-//   const seenInThisBatch = new Set();
-//   const duplicateRecordsToSave: any[] = [];
-
-//   for (const record of records) {
-//     const intimationNoKey = Object.keys(record).find(
-//       (k) => k.trim().toLowerCase() === "intimation no"
-//     );
-//     const intimationNo = intimationNoKey ? record[intimationNoKey] : null;
-
-//     if (intimationNo) {
-//       // Check for duplicates within the current batch
-//       if (seenInThisBatch.has(intimationNo)) {
-//         logger.warn(`Duplicate within batch for Intimation No: ${intimationNo}.`);
-//         duplicateRecordsToSave.push({ ...record, reason: "Duplicate within same batch" });
-//         // continue; // <-- REMOVED: By removing 'continue', the record will still be processed normally.
-//       }
-
-//       // Check for duplicates against the database index
-//       const indexRef = db.ref(`/intimationNoIndex/${intimationNo}`);
-//       const snapshot = await indexRef.once("value");
-
-//       if (snapshot.exists()) {
-//         logger.warn(`Duplicate in DB for Intimation No: ${intimationNo}.`);
-//         const originalRecordId = snapshot.val();
-//         duplicateRecordsToSave.push({ ...record, reason: `Duplicate of existing record: ${originalRecordId}` });
-//         // continue; // <-- REMOVED: By removing 'continue', the record will still be processed normally.
-//       }
-//     }
-
-//     // If we reach here, the record is unique (or we are intentionally allowing duplicates)
-//     if (intimationNo) {
-//       seenInThisBatch.add(intimationNo);
-//     }
-
-//     // Generate a unique ID for the new record
-//     const { snapshot: idSnapshot } = await idCounterRef.transaction(
-//       (currentData: { lastId: number } | null) => {
-//         if (currentData === null) { return { lastId: 1 }; }
-//         currentData.lastId++;
-//         return currentData;
-//       }
-//     );
-
-//     const newId = idSnapshot.val().lastId;
-//     const prefix = generateIdPrefix(location, taluka);
-//     const uniqueId = `${prefix}${newId}`;
-
-//     // Prepare the new record to be saved
-//     const newRecord: ProcessedRecord = {
-//       ...record,
-//       uniqueId: uniqueId,
-//       bundleNo: bundleNo,
-//       processedBy: userId,
-//       processedAt: new Date().toISOString(),
-//       sourceFile: sourceFile,
-//       taluka: taluka,
-//     };
-
-//     // Add the new record and its index entry to the updates object
-//     const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}/${uniqueId}`;
-//     updates[recordPath] = newRecord;
-
-//     if (intimationNo) {
-//       const indexPath = `/intimationNoIndex/${intimationNo}`;
-//       updates[indexPath] = uniqueId; // Store the uniqueId in the index
-//     }
-
-//     newRecordsCount++;
-//   }
-
-//   // Process and prepare any found duplicates for saving
-//   // This block now runs alongside saving all records to the main path.
-//   if (duplicateRecordsToSave.length > 0) {
-//     const duplicatesRef = db.ref(`/duplicateRecords/${location}/${taluka}`);
-//     duplicateRecordsToSave.forEach(dup => {
-//       const newDuplicateKey = duplicatesRef.push().key;
-//       const duplicateData = {
-//         ...dup, // The full original data of the duplicate record
-//         submittedBy: userId,
-//         submittedAt: new Date().toISOString(),
-//         sourceBundleNo: bundleNo,
-//       };
-//       updates[`/duplicateRecords/${location}/${taluka}/${newDuplicateKey}`] = duplicateData;
-//     });
-//   }
-
-//   // Atomically save all records (including duplicates) to processedRecords,
-//   // their index entries, AND the separate duplicate records path.
-//   if (Object.keys(updates).length > 0) {
-//     await db.ref().update(updates);
-//   }
-
-//   // If new records were saved, increment the user's active bundle count
-//   if (newRecordsCount > 0) {
-//     const userStateCountRef = db.ref(
-//       `userStates/${userId}/activeBundles/${taluka}/count`
-//     );
-//     await userStateCountRef.set(
-//       admin.database.ServerValue.increment(newRecordsCount)
-//     );
-//   } else {
-//     logger.info("No new records to save in this batch.");
-//   }
-// }
 
 interface ProcessedRecord {
   [key: string]: any; // Allows for dynamic keys from the source file
@@ -589,6 +331,11 @@ interface ProcessedRecord {
  * @param sourceFile - The name of the file from which records were processed.
  */
 
+/**
+ * [FINAL EFFICIENT VERSION]
+ * Saves processed records and performs lightweight, incremental updates to the analytics node.
+ * This function is designed to be fast and cheap for everyday operations.
+ */
 export async function saveProcessedRecordsToDB(
   userId: string,
   location: string,
@@ -599,25 +346,22 @@ export async function saveProcessedRecordsToDB(
 ): Promise<void> {
   const db = admin.database();
 
-  // --- VALIDATE ACTIVE BUNDLE ---
+  // --- Active Bundle Validation ---
   const activeBundleRef = db.ref(
     `userStates/${userId}/activeBundles/${taluka}`
   );
   const activeBundleSnapshot = await activeBundleRef.once("value");
-
   if (!activeBundleSnapshot.exists()) {
     throw new Error(
       `User does not have an active bundle for taluka: ${taluka}.`
     );
   }
-
   const activeBundleData = activeBundleSnapshot.val();
   if (Number(activeBundleData.bundleNo) !== Number(bundleNo)) {
     throw new Error(
       `Submission for bundle #${bundleNo} is not allowed. The active bundle for ${taluka} is #${activeBundleData.bundleNo}.`
     );
   }
-
   if (records.length > 250) {
     throw new Error("Cannot sync more than 250 records at a time.");
   }
@@ -625,9 +369,17 @@ export async function saveProcessedRecordsToDB(
   const updates: { [key: string]: any } = {};
   const seenIntimationNos = new Set<string>();
   let countToIncrement = 0;
+  const user = await getUserFromDB(userId);
+
+  // Get date key once for the entire batch
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + istOffset);
+  const dateKey = `${istDate.getUTCFullYear()}-${String(
+    istDate.getUTCMonth() + 1
+  ).padStart(2, "0")}-${String(istDate.getUTCDate()).padStart(2, "0")}`;
 
   for (const record of records) {
-    // --- FIND UNIQUE ID ---
     const uniqueIdKey = Object.keys(record).find(
       (k) =>
         k
@@ -635,47 +387,31 @@ export async function saveProcessedRecordsToDB(
           .toLowerCase()
           .replace(/[\s_-]/g, "") === "uniqueid"
     );
-
     if (!uniqueIdKey || !record[uniqueIdKey]) {
-      logger.error("A record in the batch is missing its unique ID.", {
-        record,
-      });
       throw new Error(`A record in the batch is missing its unique ID.`);
     }
     const uniqueId = record[uniqueIdKey];
 
-    // --- DUPLICATE CHECKING ---
+    // --- Duplicate checking ---
     let isDuplicate = false;
     const intimationNoKey = Object.keys(record).find(
       (k) => k.trim().toLowerCase() === "intimation no"
     );
     const intimationNo = intimationNoKey ? record[intimationNoKey] : null;
-
     if (intimationNo) {
       if (seenIntimationNos.has(intimationNo)) {
         isDuplicate = true;
-        logger.warn(
-          `Duplicate within batch for Intimation No: ${intimationNo}.`
-        );
       } else {
         seenIntimationNos.add(intimationNo);
-      }
-
-      if (!isDuplicate) {
         const snapshot = await db
           .ref(`/intimationNoIndex/${intimationNo}`)
           .once("value");
         if (snapshot.exists()) {
           isDuplicate = true;
-          const originalRecordId = snapshot.val();
-          logger.warn(
-            `Duplicate in DB for Intimation No: ${intimationNo}. Original ID: ${originalRecordId}`
-          );
         }
       }
     }
 
-    // --- PREPARE RECORD ---
     const newRecord: ProcessedRecord = {
       ...record,
       bundleNo,
@@ -684,39 +420,82 @@ export async function saveProcessedRecordsToDB(
       sourceFile,
       taluka,
     };
-
-    // Always save to processedRecords
     const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}/${uniqueId}`;
+
+    // Only perform analytics updates for brand new records
+    const existingRecordSnap = await db.ref(recordPath).once("value");
+    if (!existingRecordSnap.exists()) {
+      countToIncrement++;
+
+      // --- All analytics increment logic is now here ---
+      updates[`/analytics/totalRecords`] =
+        admin.database.ServerValue.increment(1);
+      updates[`/analytics/recordsByLocation/${location}`] =
+        admin.database.ServerValue.increment(1);
+      updates[`/analytics/dailyCounts/${dateKey}`] =
+        admin.database.ServerValue.increment(1);
+
+      const pdfKey = Object.keys(record).find(
+        (k) => k.trim().toLowerCase() === "pdf required"
+      );
+      if (pdfKey && record[pdfKey] === "yes") {
+        updates[`/analytics/totalPdfsRequired`] =
+          admin.database.ServerValue.increment(1);
+        updates[`/analytics/todayStats/pdfRequired`] =
+          admin.database.ServerValue.increment(1);
+      }
+
+      if (user) {
+        updates[`/analytics/userLeaderboard/${userId}/recordsProcessed`] =
+          admin.database.ServerValue.increment(1);
+        updates[`/analytics/userLeaderboard/${userId}/userName`] = user.name;
+      }
+
+      if (sourceFile) {
+        const fileKey = sourceFile.replace(/[.#$[\]]/g, "_");
+        updates[`/analytics/fileStats/${fileKey}/completed`] =
+          admin.database.ServerValue.increment(1);
+        updates[`/analytics/fileStats/${fileKey}/fileName`] = sourceFile;
+      }
+
+      const bundleKey = `${location}-${taluka}-${bundleNo}`;
+      updates[`/analytics/bundleSummaries/${bundleKey}/recordsProcessed`] =
+        admin.database.ServerValue.increment(1);
+      updates[`/analytics/bundleSummaries/${bundleKey}/location`] = location;
+      updates[`/analytics/bundleSummaries/${bundleKey}/taluka`] = taluka;
+      updates[`/analytics/bundleSummaries/${bundleKey}/bundleNo`] = bundleNo;
+    }
+
+    // --- The rest of the saving logic ---
     updates[recordPath] = newRecord;
 
-    // Maintain intimationNo index
     if (intimationNo) {
       updates[`/intimationNoIndex/${intimationNo}`] = uniqueId;
     }
 
-    // Save duplicates separately
     if (isDuplicate) {
-      const duplicatesRef = db.ref(`/duplicateRecords/${location}/${taluka}`);
-      const newDuplicateKey = duplicatesRef.push().key;
+      const newDuplicateKey = db
+        .ref(`/duplicateRecords/${location}/${taluka}`)
+        .push().key;
       updates[`/duplicateRecords/${location}/${taluka}/${newDuplicateKey}`] = {
         ...newRecord,
         reason: "Duplicate record",
       };
-    }
-
-    // --- COUNT PROTECTION: Only count if not already in processedRecords ---
-    const existingRecordSnap = await db.ref(recordPath).once("value");
-    if (!existingRecordSnap.exists()) {
-      countToIncrement++;
+      updates[`/analytics/totalDuplicates`] =
+        admin.database.ServerValue.increment(1);
+      if (user) {
+        updates[`/analytics/userLeaderboard/${userId}/duplicateCount`] =
+          admin.database.ServerValue.increment(1);
+      }
     }
   }
 
-  // --- APPLY ALL UPDATES ---
+  // Atomically write all updates (records, indexes, and analytics) in one go
   if (Object.keys(updates).length > 0) {
     await db.ref().update(updates);
   }
 
-  // --- INCREMENT USER'S BUNDLE COUNT ---
+  // Update the user's personal count for the active bundle
   if (countToIncrement > 0) {
     const userStateCountRef = db.ref(
       `userStates/${userId}/activeBundles/${taluka}/count`
@@ -724,8 +503,6 @@ export async function saveProcessedRecordsToDB(
     await userStateCountRef.set(
       admin.database.ServerValue.increment(countToIncrement)
     );
-  } else {
-    logger.info("No new unique records to increase count for.");
   }
 }
 
@@ -792,6 +569,15 @@ export async function markBundleAsCompleteInDB(
   const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}`;
   updates[`${recordPath}/isUserCompleted`] = true;
   updates[`${recordPath}/userCompletedAt`] = new Date().toISOString();
+
+  const bundleKey = `${location}-${taluka}-${bundleNo}`;
+  updates[`/analytics/bundleSummaries/${bundleKey}/status`] =
+    "Completed by User";
+  updates[`/analytics/bundleSummaries/${bundleKey}/userName`] = user.name;
+
+  // Decrement active bundles count
+  updates[`/analytics/topLevelStats/activeBundles`] =
+    admin.database.ServerValue.increment(-1);
 
   await db.ref().update(updates);
 
@@ -1027,6 +813,12 @@ export async function resetUserProgressInDB(
     return currentData;
   });
 
+  // --- NEW: Trigger a full recalculation to ensure stats are accurate ---
+  logger.info(
+    `Triggering analytics recalculation after resetting user ${userId}.`
+  );
+  await recalculateAllAnalyticsInBackend();
+
   return bundleNoToRecycle;
 }
 
@@ -1047,11 +839,19 @@ export async function forceCompleteBundleInDB(
 ): Promise<void> {
   const db = admin.database();
   const updates: { [key: string]: any } = {};
+  const user = await getUserFromDB(userId);
 
   const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}`;
   updates[`${recordPath}/isForceCompleted`] = true;
   updates[`${recordPath}/forceCompletedBy`] = "admin";
   updates[`${recordPath}/assignedTo`] = userId;
+
+  const bundleKey = `${location}-${taluka}-${bundleNo}`;
+  updates[`/analytics/bundleSummaries/${bundleKey}/status`] =
+    "Force Completed by Admin";
+  if (user) {
+    updates[`/analytics/bundleSummaries/${bundleKey}/userName`] = user.name;
+  }
 
   const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
   const activeBundleSnapshot = await userStateRef.once("value");
@@ -1063,6 +863,9 @@ export async function forceCompleteBundleInDB(
     // Convert both values to numbers to prevent type mismatch errors (e.g., 1 === "1").
     if (Number(activeBundle.bundleNo) === Number(bundleNo)) {
       updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
+      // Decrement active bundles count
+      updates[`/analytics/topLevelStats/activeBundles`] =
+        admin.database.ServerValue.increment(-1);
     }
   }
 
@@ -1087,13 +890,20 @@ export async function manualAssignBundleToUserInDB(
   const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
   const bundleCounterRef = db.ref(`bundleCounters/${location}/${taluka}`);
 
-  // Step 1: Assign the bundle to the user.
+  // Step 1: Prepare the atomic update for user state and analytics.
+  const updates: { [key: string]: any } = {};
   const newBundle: ActiveBundle = {
     bundleNo: bundleNo,
     count: 0,
     taluka: taluka,
   };
-  await userStateRef.set(newBundle);
+  updates[`/userStates/${userId}/activeBundles/${taluka}`] = newBundle;
+  // --- Increment the active bundles counter ---
+  updates[`/analytics/topLevelStats/activeBundles`] =
+    admin.database.ServerValue.increment(1);
+
+  // Atomically set the user's bundle and update the analytics.
+  await db.ref().update(updates);
 
   // Step 2: Update the central counter to reflect the manual assignment.
   await bundleCounterRef.transaction((currentData: BundleCounter | null) => {
@@ -1193,470 +1003,123 @@ interface DashboardSummary {
   activeBundles: number;
   pdfsRequired: number;
   recordsProcessedByDate: { date: string; count: number }[];
-  recordsByLocation: { name: string; value: number }[]; // Added this line
+  recordsByLocation: { name: string; value: number }[];
 }
 
+/**
+ * [FINAL VERSION]
+ * Fetches the complete, pre-calculated dashboard summary from the /analytics node.
+ * This is the most efficient version, performing only a single database read.
+ */
 export async function getDashboardSummaryFromDB(): Promise<DashboardSummary> {
   const db = admin.database();
+  const snapshot = await db.ref("analytics").once("value");
 
-  const [
-    usersSnapshot,
-    filesSnapshot,
-    processedRecordsSnapshot,
-    activeBundlesSnapshot,
-  ] = await Promise.all([
-    db.ref("users").once("value"),
-    db.ref("files").once("value"),
-    db.ref("processedRecords").once("value"),
-    db.ref("userStates").once("value"),
-  ]);
-
-  const registeredUsers = usersSnapshot.exists()
-    ? usersSnapshot.numChildren()
-    : 0;
-
-  let totalExcelRecords = 0;
-  if (filesSnapshot.exists()) {
-    const filesData = filesSnapshot.val();
-    for (const location in filesData) {
-      for (const fileId in filesData[location]) {
-        totalExcelRecords += filesData[location][fileId].content?.length || 0;
-      }
-    }
+  if (!snapshot.exists()) {
+    // Return a default, empty structure if analytics haven't been calculated yet
+    return {
+      totalExcelRecords: 0,
+      completedRecords: 0,
+      pendingRecords: 0,
+      registeredUsers: 0,
+      activeBundles: 0,
+      pdfsRequired: 0,
+      recordsProcessedByDate: [],
+      recordsByLocation: [],
+    };
   }
 
-  let completedRecords = 0;
-  let pdfsRequired = 0;
-  const dailyCounts: Record<string, number> = {};
+  const analyticsData = snapshot.val();
+  const topStats = analyticsData.topLevelStats || {};
 
-  // --- NEW: Object to hold counts for each location ---
-  const locationCounts: Record<string, number> = {};
-
-  if (processedRecordsSnapshot.exists()) {
-    const recordsData = processedRecordsSnapshot.val();
-    for (const location in recordsData) {
-      for (const taluka in recordsData[location]) {
-        for (const bundle in recordsData[location][taluka]) {
-          const recordsInBundle = recordsData[location][taluka][bundle];
-          for (const recordId in recordsInBundle) {
-            const record = recordsInBundle[recordId];
-            if (record && typeof record === "object") {
-              completedRecords++;
-
-              // --- NEW: Increment the count for the current location ---
-              locationCounts[location] = (locationCounts[location] || 0) + 1;
-
-              if (
-                record.processedAt &&
-                typeof record.processedAt === "string"
-              ) {
-                const date = record.processedAt.split("T")[0];
-                dailyCounts[date] = (dailyCounts[date] || 0) + 1;
-              }
-
-              const pdfKey = Object.keys(record).find(
-                (k) => k.trim().toLowerCase() === "pdf required"
-              );
-              if (
-                pdfKey &&
-                typeof record[pdfKey] === "string" &&
-                record[pdfKey].toLowerCase() === "yes"
-              ) {
-                pdfsRequired++;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  const recordsProcessedByDate = Object.keys(dailyCounts)
-    .map((date) => ({
-      date: date,
-      count: dailyCounts[date]!,
-    }))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  // --- NEW: Format the locationCounts object for the frontend chart ---
-  const recordsByLocation = Object.keys(locationCounts).map((locationSlug) => ({
-    // Capitalize the first letter for a nice display name, e.g., "ahilyanagar" -> "Ahilyanagar"
-    name: locationSlug.charAt(0).toUpperCase() + locationSlug.slice(1),
-    value: locationCounts[locationSlug]!,
+  // --- Format Records by Location ---
+  const recordsByLocation = Object.values(
+    analyticsData.recordsByLocation || []
+  ).map((locationObject: any) => ({
+    name:
+      locationObject.name.charAt(0).toUpperCase() +
+      locationObject.name.slice(1),
+    value: Number(locationObject.value),
   }));
 
-  let activeBundles = 0;
-  if (activeBundlesSnapshot.exists()) {
-    const userStates = activeBundlesSnapshot.val();
-    for (const userId in userStates) {
-      activeBundles += Object.keys(
-        userStates[userId].activeBundles || {}
-      ).length;
-    }
+  // --- Format Last 7 Days of Data ---
+  const recordsProcessedByDate = [];
+  const dailyCounts = analyticsData.dailyCounts || {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(d.getDate()).padStart(2, "0")}`;
+    const displayDate = d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    recordsProcessedByDate.push({
+      date: displayDate,
+      count: dailyCounts[dateKey] || 0,
+    });
   }
 
+  // Assemble the final object using the pre-calculated data from topLevelStats
   return {
-    totalExcelRecords,
-    completedRecords,
-    pendingRecords: totalExcelRecords - completedRecords,
-    registeredUsers,
-    activeBundles,
-    pdfsRequired,
+    totalExcelRecords: topStats.totalExcelRecords || 0,
+    completedRecords: topStats.completedRecords || 0,
+    pendingRecords: topStats.pendingRecords || 0,
+    registeredUsers: topStats.registeredUsers || 0,
+    activeBundles: topStats.activeBundles || 0,
+    pdfsRequired: topStats.pdfRequired || 0,
     recordsProcessedByDate,
-    recordsByLocation, // <-- Added the final data here
+    recordsByLocation,
   };
-}
-
-const istOffset = 5.5 * 60 * 60 * 1000; // +5:30 IST offset
-
-function formatISTDate(date: Date) {
-  const istDate = new Date(date.getTime() + istOffset);
-  return `${istDate.getUTCFullYear()}-${String(
-    istDate.getUTCMonth() + 1
-  ).padStart(2, "0")}-${String(istDate.getUTCDate()).padStart(2, "0")}`;
 }
 
 /**
  * Gathers and computes all data needed for the entire Analytics page.
  * This is an expensive operation as it processes all data in the database.
+ * Gathers and computes all data needed for the entire Analytics page.
+ * Reads from pre-aggregated data in /analytics and now includes today/yesterday stats.
  * @param filters - Optional filters for the bundle summary.
  * @returns An object containing all aggregated analytics data.
  */
 export async function getAnalyticsDataFromDB(filters: {
   location?: string;
   taluka?: string;
-}) {
+}): Promise<any> {
   const db = admin.database();
+  const snapshot = await db.ref("analytics").once("value");
 
-  // 1. FETCH ALL DATA SOURCES IN PARALLEL
-  const [
-    usersSnapshot,
-    filesSnapshot,
-    processedRecordsSnapshot,
-    userStatesSnapshot,
-    duplicateRecordsSnapshot,
-  ] = await Promise.all([
-    db.ref("users").once("value"),
-    db.ref("files").once("value"),
-    db.ref("processedRecords").once("value"),
-    db.ref("userStates").once("value"),
-    db.ref("duplicateRecords").once("value"),
-  ]);
-
-  const usersData = usersSnapshot.val() || {};
-  const filesData = filesSnapshot.val() || {};
-  const processedRecordsData = processedRecordsSnapshot.val() || {};
-  const userStatesData = userStatesSnapshot.val() || {};
-  const duplicateRecordsData = duplicateRecordsSnapshot.val() || {};
-
-  // Add these before the big `for (const location in processedRecordsData)` loop
-  let todayProcessedRecords = 0;
-  let todayPdfRequired = 0;
-  let yesterdayProcessedRecords = 0;
-  let yesterdayPdfRequired = 0;
-
-  // Get IST date in YYYY-MM-DD format
-  // Always get IST date in YYYY-MM-DD format
-  const now = new Date();
-  const istDate = formatISTDate(now); // Today in IST
-
-  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 1 day back
-  const yesterdayISTDate = formatISTDate(yesterday);
-
-  // 2. PREPARE HELPER MAPS
-  const usersList: User[] = Object.keys(usersData).map((key) => ({
-    id: key,
-    ...usersData[key],
-  }));
-  const userMap = new Map(usersList.map((u) => [u.id, u]));
-
-  const bundleToUserMap = new Map();
-  for (const userId in userStatesData) {
-    const user = userMap.get(userId);
-    if (user && userStatesData[userId].activeBundles) {
-      for (const taluka in userStatesData[userId].activeBundles) {
-        const activeBundle = userStatesData[userId].activeBundles[taluka];
-        const uniqueBundleId = `${user.location}-${taluka}-${activeBundle.bundleNo}`;
-        bundleToUserMap.set(uniqueBundleId, userId);
-      }
-    }
+  if (!snapshot.exists()) {
+    // This provides a default empty state if the recalculation has never been run
+    return {
+      topLevelStats: {},
+      recordsByLocation: [],
+      processingStatusByFile: [],
+      userLeaderboard: [],
+      bundleCompletionSummary: [],
+      duplicateStats: { duplicateLeaderboard: [] },
+    };
   }
 
-  const bundleLocationMap = new Map();
-  for (const location in processedRecordsData) {
-    for (const taluka in processedRecordsData[location]) {
-      for (const bundleKey in processedRecordsData[location][taluka]) {
-        const bundleNo = parseInt(bundleKey.replace("bundle-", ""));
-        const lookupKey = `${taluka}-${bundleNo}`;
-        bundleLocationMap.set(lookupKey, location);
-      }
-    }
+  const analyticsData = snapshot.val();
+
+  // Apply any filters to the results before returning them
+  if (filters.location && analyticsData.bundleCompletionSummary) {
+    analyticsData.bundleCompletionSummary =
+      analyticsData.bundleCompletionSummary.filter(
+        (b: any) => b.location === filters.location
+      );
   }
 
-  let totalExcelRecords = 0;
-  const fileStatsMap = new Map();
-  for (const location in filesData) {
-    for (const fileId in filesData[location]) {
-      const file = filesData[location][fileId];
-      totalExcelRecords += file.content?.length || 0;
-      fileStatsMap.set(file.name, {
-        fileName: file.name,
-        total: file.content?.length || 0,
-        completed: 0,
-      });
-    }
+  if (filters.taluka && analyticsData.bundleCompletionSummary) {
+    analyticsData.bundleCompletionSummary =
+      analyticsData.bundleCompletionSummary.filter(
+        (b: any) => b.taluka === filters.taluka
+      );
   }
 
-  // 3. PROCESS ALL RECORDS IN A SINGLE PASS
-  let completedRecords = 0;
-  let pdfRequired = 0;
-  const recordsByLocation: { [location: string]: number } = {};
-  const userRecordCounts: { [userId: string]: number } = {};
-  const bundleDetailsMap = new Map();
-
-  for (const location in processedRecordsData) {
-    recordsByLocation[location] = recordsByLocation[location] || 0;
-    for (const taluka in processedRecordsData[location]) {
-      for (const bundleKey in processedRecordsData[location][taluka]) {
-        const bundleData = processedRecordsData[location][taluka][bundleKey];
-        const bundleNo = parseInt(bundleKey.replace("bundle-", ""));
-        const uniqueBundleId = `${location}-${taluka}-${bundleNo}`;
-
-        let recordsInThisBundle = 0;
-        let pdfsInThisBundle = 0;
-        let bundleUserName = "Unknown User";
-
-        // --- FINAL, ROBUST USERNAME LOGIC ---
-        // Strategy 1: Check active bundles.
-        const activeUserId = bundleToUserMap.get(uniqueBundleId);
-        if (activeUserId) {
-          bundleUserName = userMap.get(activeUserId)?.name || "Unknown User";
-        }
-
-        // Strategy 2: Check for the permanently stored 'assignedTo' field.
-        else if (bundleData.assignedTo) {
-          bundleUserName =
-            userMap.get(bundleData.assignedTo)?.name || "Unknown User";
-        }
-
-        for (const recordId in bundleData) {
-          const record = bundleData[recordId];
-          if (record && typeof record === "object") {
-            completedRecords++;
-            recordsByLocation[location]++;
-
-            if (record.processedAt) {
-              const recordDateIST = formatISTDate(new Date(record.processedAt));
-
-              // ✅ Today
-              if (recordDateIST === istDate) {
-                todayProcessedRecords++;
-              }
-
-              // ✅ Yesterday
-              if (recordDateIST === yesterdayISTDate) {
-                yesterdayProcessedRecords++;
-              }
-            }
-
-            if (record.processedBy) {
-              userRecordCounts[record.processedBy] =
-                (userRecordCounts[record.processedBy] || 0) + 1;
-            }
-            if (record.sourceFile && fileStatsMap.has(record.sourceFile)) {
-              fileStatsMap.get(record.sourceFile).completed++;
-            }
-            const pdfKey = Object.keys(record).find(
-              (k) => k.trim().toLowerCase() === "pdf required"
-            );
-            if (
-              pdfKey &&
-              typeof record[pdfKey] === "string" &&
-              record[pdfKey].toLowerCase() === "yes"
-            ) {
-              pdfRequired++;
-
-              if (record.processedAt) {
-                const recordDateIST = formatISTDate(
-                  new Date(record.processedAt)
-                );
-
-                // ✅ Today
-                if (recordDateIST === istDate) {
-                  todayPdfRequired++;
-                }
-
-                // ✅ Yesterday
-                if (recordDateIST === yesterdayISTDate) {
-                  yesterdayPdfRequired++;
-                }
-              }
-
-              pdfsInThisBundle++;
-            }
-            recordsInThisBundle++;
-
-            // Strategy 3: Fallback for older data.
-            if (bundleUserName === "Unknown User" && record.processedBy) {
-              bundleUserName =
-                userMap.get(record.processedBy)?.name || "Unknown User";
-            }
-          }
-        }
-
-        let status = null;
-        if (bundleData.isForceCompleted) status = "Force Completed by Admin";
-        else if (bundleData.isUserCompleted) status = "Completed by User";
-        else if (recordsInThisBundle === 250) status = "Completed by User";
-
-        bundleDetailsMap.set(uniqueBundleId, {
-          userName: bundleUserName,
-          location,
-          taluka,
-          bundleNo,
-          recordsProcessed: recordsInThisBundle,
-          pdfsRequired: pdfsInThisBundle,
-          status: status,
-        });
-      }
-    }
-  }
-
-  let totalDuplicates = 0;
-  const duplicatesByUser: { [userId: string]: number } = {};
-
-  if (duplicateRecordsSnapshot.exists()) {
-    for (const location in duplicateRecordsData) {
-      for (const taluka in duplicateRecordsData[location]) {
-        for (const recordId in duplicateRecordsData[location][taluka]) {
-          const duplicateRecord =
-            duplicateRecordsData[location][taluka][recordId];
-          if (duplicateRecord) {
-            totalDuplicates++;
-            if (duplicateRecord.processedBy) {
-              duplicatesByUser[duplicateRecord.processedBy] =
-                (duplicatesByUser[duplicateRecord.processedBy] || 0) + 1;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  const duplicateLeaderboard = Object.entries(duplicatesByUser)
-    .map(([userId, count]) => ({
-      userName: userMap.get(userId)?.name || "Unknown User",
-      duplicateCount: count,
-    }))
-    .sort((a, b) => b.duplicateCount - a.duplicateCount);
-
-  const duplicateStats = {
-    duplicateLeaderboard,
-  };
-
-  // 4. ASSEMBLE FINAL DATA STRUCTURES
-  const topLevelStats = {
-    totalExcelRecords,
-    completedRecords,
-    pendingRecords: totalExcelRecords - completedRecords,
-    registeredUsers: usersList.length,
-    activeBundles: Object.values(userStatesData).reduce(
-      (acc: number, state: any) =>
-        acc + Object.keys(state.activeBundles || {}).length,
-      0
-    ),
-    pdfRequired,
-    totalDuplicates,
-    todayProcessedRecords,
-    todayPdfRequired,
-    yesterdayProcessedRecords,
-    yesterdayPdfRequired
-  };
-
-  let bundleCompletionSummary = Array.from(bundleDetailsMap.values()).filter(
-    (b) => b.status !== null
-  );
-  const handledBundles = new Set(
-    bundleCompletionSummary.map(
-      (b) => `${b.location}-${b.taluka}-${b.bundleNo}`
-    )
-  );
-  // MODIFIED 'userStates' loop
-  for (const userId in userStatesData) {
-    const user = userMap.get(userId);
-    if (user && userStatesData[userId].activeBundles) {
-      for (const taluka in userStatesData[userId].activeBundles) {
-        const activeBundle = userStatesData[userId].activeBundles[taluka];
-
-        // --- Start of new logic ---
-        // 1. Find the bundle's true location from our new map
-        const lookupKey = `${taluka}-${activeBundle.bundleNo}`;
-        const trueLocation = bundleLocationMap.get(lookupKey);
-
-        // 2. If we found a true location, use it. If not, fall back to the user's location.
-        const finalLocation = trueLocation || user.location;
-
-        // 3. Build the correct ID to look up details
-        const uniqueBundleId = `${finalLocation}-${taluka}-${activeBundle.bundleNo}`;
-        // --- End of new logic ---
-
-        if (!handledBundles.has(uniqueBundleId)) {
-          const details = bundleDetailsMap.get(uniqueBundleId);
-          bundleCompletionSummary.push({
-            userName: user.name,
-            location: finalLocation, // Use the final, corrected location
-            taluka,
-            bundleNo: activeBundle.bundleNo,
-            recordsProcessed: details
-              ? details.recordsProcessed
-              : activeBundle.count || 0,
-            pdfsRequired: details ? details.pdfsRequired : 0,
-            status: "In Progress",
-          });
-        }
-      }
-    }
-  }
-  const processingStatusByFile = Array.from(fileStatsMap.values()).map(
-    (file) => ({
-      ...file,
-      pending: file.total - file.completed,
-      progress:
-        file.total > 0 ? Math.round((file.completed / file.total) * 100) : 0,
-    })
-  );
-
-  const userLeaderboard = Object.entries(userRecordCounts)
-    .map(([userId, count]) => ({
-      rank: 0,
-      userName: userMap.get(userId)?.name || "Unknown User",
-      recordsProcessed: count,
-    }))
-    .sort((a, b) => b.recordsProcessed - a.recordsProcessed)
-    .map((user, index) => ({ ...user, rank: index + 1 }));
-
-  // 5. APPLY FILTERS AND RETURN
-  if (filters.location) {
-    bundleCompletionSummary = bundleCompletionSummary.filter(
-      (b) => b.location === filters.location
-    );
-  }
-  if (filters.taluka) {
-    bundleCompletionSummary = bundleCompletionSummary.filter(
-      (b) => b.taluka === filters.taluka
-    );
-  }
-
-  return {
-    topLevelStats,
-    recordsByLocation: Object.entries(recordsByLocation).map(
-      ([name, value]) => ({ name, value })
-    ),
-    processingStatusByFile,
-    userLeaderboard,
-    bundleCompletionSummary,
-    duplicateStats,
-  };
+  return analyticsData;
 }
 
 /**
@@ -1841,7 +1304,12 @@ export async function clearUserActiveBundleInDB(
     );
   }
 
-  await userStateRef.remove();
+  const updates: { [key: string]: any } = {};
+  updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
+  updates[`/analytics/topLevelStats/activeBundles`] =
+    admin.database.ServerValue.increment(-1);
+
+  await db.ref().update(updates);
 }
 
 /**
@@ -1864,5 +1332,405 @@ export async function deleteFileFromDB(
     );
   }
 
-  await fileRef.remove();
+  const fileData = snapshot.val();
+  const recordCount = fileData.content?.length || 0;
+
+  const updates: { [key: string]: any } = {};
+
+  // 1. Mark the file for deletion
+  updates[`/files/${location}/${fileId}`] = null;
+
+  // 2. Decrement the analytics counters
+  updates[`/analytics/topLevelStats/totalExcelRecords`] =
+    admin.database.ServerValue.increment(-recordCount);
+  updates[`/analytics/topLevelStats/pendingRecords`] =
+    admin.database.ServerValue.increment(-recordCount);
+
+  await db.ref().update(updates);
+}
+
+/**
+ * [CORRECTED]
+ * This function lives in your backend and performs the full, expensive recalculation.
+ * It now correctly skips metadata keys to prevent NaN errors.
+ */
+
+// ---------- Types ----------
+interface FileEntry {
+  name: string;
+  content?: unknown[];
+}
+
+interface FilesByLocation {
+  [location: string]: {
+    [fileId: string]: FileEntry;
+  };
+}
+
+interface UsersData {
+  [id: string]: Omit<User, "id">;
+}
+
+interface UserState {
+  activeBundles?: Record<string, ActiveBundle>;
+}
+
+interface UserStatesData {
+  [id: string]: UserState;
+}
+
+interface RecordEntry {
+  processedAt?: string | number;
+  processedBy?: string;
+  sourceFile?: string;
+  [key: string]: unknown;
+}
+
+interface BundleData {
+  assignedTo?: string;
+  isForceCompleted?: boolean;
+  isUserCompleted?: boolean;
+  [recordId: string]: RecordEntry | unknown;
+}
+
+interface ProcessedRecordsData {
+  [location: string]: {
+    [taluka: string]: {
+      [bundleKey: string]: BundleData;
+    };
+  };
+}
+
+interface DuplicateRecordsData {
+  [location: string]: {
+    [taluka: string]: {
+      [recordId: string]: RecordEntry;
+    };
+  };
+}
+
+interface FileStats {
+  fileName: string;
+  total: number;
+  completed: number;
+}
+
+interface BundleDetails {
+  userName: string;
+  location: string;
+  taluka: string;
+  bundleNo: number;
+  recordsProcessed: number;
+  pdfsRequired: number;
+  status: string | null;
+}
+
+// ---------- Function ----------
+export async function recalculateAllAnalyticsInBackend(): Promise<void> {
+  logger.info("Starting full analytics recalculation from backend service...");
+  const db = admin.database();
+
+  const [
+    processedRecordsSnapshot,
+    duplicateRecordsSnapshot,
+    usersSnapshot,
+    filesSnapshot,
+    userStatesSnapshot,
+  ] = await Promise.all([
+    db.ref("processedRecords").once("value"),
+    db.ref("duplicateRecords").once("value"),
+    db.ref("users").once("value"),
+    db.ref("files").once("value"),
+    db.ref("userStates").once("value"),
+  ]);
+
+  const processedRecordsData: ProcessedRecordsData =
+    (processedRecordsSnapshot.val() as ProcessedRecordsData) || {};
+  const duplicateRecordsData: DuplicateRecordsData =
+    (duplicateRecordsSnapshot.val() as DuplicateRecordsData) || {};
+  const usersData: UsersData = (usersSnapshot.val() as UsersData) || {};
+  const filesData: FilesByLocation =
+    (filesSnapshot.val() as FilesByLocation) || {};
+  const userStatesData: UserStatesData =
+    (userStatesSnapshot.val() as UserStatesData) || {};
+
+  // Helpers
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const formatISTDate = (date: Date): string => {
+    const istDate = new Date(date.getTime() + istOffset);
+    return `${istDate.getUTCFullYear()}-${String(
+      istDate.getUTCMonth() + 1
+    ).padStart(2, "0")}-${String(istDate.getUTCDate()).padStart(2, "0")}`;
+  };
+
+  const todayStr = formatISTDate(new Date());
+  const yesterdayStr = formatISTDate(new Date(Date.now() - 86400000));
+
+  // Data holders
+  let todayProcessedRecords = 0;
+  let todayPdfRequired = 0;
+  let yesterdayProcessedRecords = 0;
+  let yesterdayPdfRequired = 0;
+  let completedRecords = 0;
+  let pdfRequired = 0;
+  let totalDuplicates = 0;
+  let totalExcelRecords = 0;
+
+  const dailyCounts: Record<string, number> = {};
+  const recordsByLocation: Record<string, number> = {};
+  const userRecordCounts: Record<string, number> = {};
+  const duplicatesByUser: Record<string, number> = {};
+  const fileStatsMap = new Map<string, FileStats>();
+  const bundleDetailsMap = new Map<string, BundleDetails>();
+
+  // --- FILE STATS ---
+  for (const location in filesData) {
+    for (const fileId in filesData[location]) {
+      const file = filesData[location][fileId];
+      totalExcelRecords += file!.content?.length || 0;
+      fileStatsMap.set(file!.name, {
+        fileName: file!.name,
+        total: file!.content?.length || 0,
+        completed: 0,
+      });
+    }
+  }
+
+  // --- USER MAP ---
+  const userMap = new Map<string, User>(
+    Object.entries(usersData).map(([id, data]) => [
+      id,
+      { id, ...(data as object) } as User,
+    ])
+  );
+
+  // --- ACTIVE BUNDLE MAP ---
+  const bundleToUserMap = new Map<string, string>();
+  for (const userId in userStatesData) {
+    const user = userMap.get(userId);
+    const state = userStatesData[userId];
+    if (user && state!.activeBundles) {
+      for (const taluka in state!.activeBundles) {
+        const activeBundle = state!.activeBundles[taluka];
+        const uniqueBundleId = `${user.location}-${taluka}-${
+          activeBundle!.bundleNo
+        }`;
+        bundleToUserMap.set(uniqueBundleId, userId);
+      }
+    }
+  }
+
+  // --- PROCESS RECORDS ---
+  for (const location in processedRecordsData) {
+    recordsByLocation[location] = recordsByLocation[location] || 0;
+    for (const taluka in processedRecordsData[location]) {
+      for (const bundleKey in processedRecordsData[location][taluka]) {
+        if (!bundleKey.startsWith("bundle-")) continue;
+
+        const bundleData = processedRecordsData[location][taluka][bundleKey];
+        const bundleNo = parseInt(bundleKey.replace("bundle-", ""));
+        if (isNaN(bundleNo)) continue;
+
+        const uniqueBundleId = `${location}-${taluka}-${bundleNo}`;
+
+        let recordsInThisBundle = 0;
+        let pdfsInThisBundle = 0;
+        let bundleUserName = "Unknown User";
+
+        // Find bundle user
+        const activeUserId = bundleToUserMap.get(uniqueBundleId);
+        if (activeUserId) {
+          bundleUserName = userMap.get(activeUserId)?.name || "Unknown User";
+        } else if ((bundleData as BundleData).assignedTo) {
+          bundleUserName =
+            userMap.get((bundleData as BundleData).assignedTo!)?.name ||
+            "Unknown User";
+        }
+
+        for (const recordId in bundleData) {
+          const record = bundleData[recordId];
+          if (record && typeof record === "object" && !Array.isArray(record)) {
+            const r = record as RecordEntry;
+            completedRecords++;
+            recordsByLocation[location]++;
+
+            if (r.processedAt) {
+              const recordDate = formatISTDate(new Date(r.processedAt));
+              if (!dailyCounts[recordDate]) dailyCounts[recordDate] = 0;
+              dailyCounts[recordDate]++; // Increment the count for the specific date
+
+              if (recordDate === todayStr) todayProcessedRecords++;
+              if (recordDate === yesterdayStr) yesterdayProcessedRecords++;
+            }
+
+            if (r.processedBy) {
+              userRecordCounts[r.processedBy] =
+                (userRecordCounts[r.processedBy] || 0) + 1;
+            }
+
+            if (r.sourceFile && fileStatsMap.has(r.sourceFile)) {
+              const fileStat = fileStatsMap.get(r.sourceFile);
+              if (fileStat) fileStat.completed++;
+            }
+
+            const pdfKey = Object.keys(r).find(
+              (k) => k.trim().toLowerCase() === "pdf required"
+            );
+            if (pdfKey && String(r[pdfKey]).toLowerCase() === "yes") {
+              pdfRequired++;
+              if (r.processedAt) {
+                const recordDate = formatISTDate(new Date(r.processedAt));
+                if (recordDate === todayStr) todayPdfRequired++;
+                if (recordDate === yesterdayStr) yesterdayPdfRequired++;
+              }
+              pdfsInThisBundle++;
+            }
+
+            recordsInThisBundle++;
+
+            if (bundleUserName === "Unknown User" && r.processedBy) {
+              bundleUserName =
+                userMap.get(r.processedBy)?.name || "Unknown User";
+            }
+          }
+        }
+
+        let status: string | null = null;
+        if ((bundleData as BundleData).isForceCompleted)
+          status = "Force Completed by Admin";
+        else if ((bundleData as BundleData).isUserCompleted)
+          status = "Completed by User";
+        else if (recordsInThisBundle === 250) status = "Completed by User";
+
+        bundleDetailsMap.set(uniqueBundleId, {
+          userName: bundleUserName,
+          location,
+          taluka,
+          bundleNo,
+          recordsProcessed: recordsInThisBundle,
+          pdfsRequired: pdfsInThisBundle,
+          status,
+        });
+      }
+    }
+  }
+
+  // --- DUPLICATES ---
+  for (const location in duplicateRecordsData) {
+    for (const taluka in duplicateRecordsData[location]) {
+      for (const recordId in duplicateRecordsData[location][taluka]) {
+        const record = duplicateRecordsData[location][taluka][recordId];
+        if (record) {
+          totalDuplicates++;
+          if (record.processedBy) {
+            duplicatesByUser[record.processedBy] =
+              (duplicatesByUser[record.processedBy] || 0) + 1;
+          }
+        }
+      }
+    }
+  }
+
+  const duplicateLeaderboard = Object.entries(duplicatesByUser)
+    .map(([userId, count]) => ({
+      userName: userMap.get(userId)?.name || "Unknown User",
+      duplicateCount: count,
+    }))
+    .sort((a, b) => b.duplicateCount - a.duplicateCount);
+
+  const duplicateStats = { duplicateLeaderboard };
+
+  // --- FILE STATUS ---
+  const processingStatusByFile = Array.from(fileStatsMap.values()).map(
+    (file) => ({
+      ...file,
+      pending: file.total - file.completed,
+      progress:
+        file.total > 0 ? Math.round((file.completed / file.total) * 100) : 0,
+    })
+  );
+
+  // --- USER LEADERBOARD ---
+  const userLeaderboard = Object.entries(userRecordCounts)
+    .map(([userId, count]) => ({
+      rank: 0,
+      userName: userMap.get(userId)?.name || "Unknown User",
+      recordsProcessed: count,
+    }))
+    .sort((a, b) => b.recordsProcessed - a.recordsProcessed)
+    .map((user, idx) => ({ ...user, rank: idx + 1 }));
+
+  // --- BUNDLE COMPLETION SUMMARY ---
+  let bundleCompletionSummary = Array.from(bundleDetailsMap.values()).filter(
+    (b) => b.status !== null
+  );
+
+  const handledBundles = new Set(
+    bundleCompletionSummary.map(
+      (b) => `${b.location}-${b.taluka}-${b.bundleNo}`
+    )
+  );
+
+  for (const userId in userStatesData) {
+    const user = userMap.get(userId);
+    const state = userStatesData[userId];
+    if (user && state!.activeBundles) {
+      for (const taluka in state!.activeBundles) {
+        const activeBundle = state!.activeBundles[taluka];
+        const uniqueBundleId = `${user.location}-${taluka}-${
+          activeBundle!.bundleNo
+        }`;
+        if (!handledBundles.has(uniqueBundleId)) {
+          const details = bundleDetailsMap.get(uniqueBundleId);
+          bundleCompletionSummary.push({
+            userName: user.name || "Unknown User",
+            location: user.location || "Unknown",
+            taluka,
+            bundleNo: activeBundle!.bundleNo,
+            recordsProcessed: details
+              ? details.recordsProcessed
+              : activeBundle!.count || 0,
+            pdfsRequired: details ? details.pdfsRequired : 0,
+            status: "In Progress",
+          });
+        }
+      }
+    }
+  }
+
+  // --- TOP LEVEL STATS ---
+  const topLevelStats = {
+    totalExcelRecords,
+    completedRecords,
+    pendingRecords: totalExcelRecords - completedRecords,
+    registeredUsers: Object.keys(usersData).length,
+    activeBundles: Object.values(userStatesData).reduce(
+      (acc: number, state: UserState) =>
+        acc + Object.keys(state.activeBundles || {}).length,
+      0
+    ),
+    pdfRequired,
+    totalDuplicates,
+    todayProcessedRecords,
+    todayPdfRequired,
+    yesterdayProcessedRecords,
+    yesterdayPdfRequired,
+  };
+
+  const finalAnalytics = {
+    topLevelStats,
+    recordsByLocation: Object.entries(recordsByLocation).map(
+      ([name, value]) => ({ name, value })
+    ),
+    processingStatusByFile,
+    userLeaderboard,
+    bundleCompletionSummary,
+    duplicateStats,
+    dailyCounts,
+  };
+
+  // console.log(finalAnalytics);
+
+  await db.ref("analytics").set(finalAnalytics);
+  logger.info("Full analytics recalculation complete.");
 }

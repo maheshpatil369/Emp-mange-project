@@ -384,3 +384,24 @@ export const exportDuplicateLog = async (
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
+export const triggerRecalculation = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    console.info("Backend received request to trigger analytics recalculation.");
+    
+    // This now calls the function that lives inside your firebase.service.ts
+    await firebaseService.recalculateAllAnalyticsInBackend();
+
+    return res.status(200).json({ 
+      status: "ok", 
+      message: "Analytics recalculation completed successfully." 
+    });
+
+  } catch (error: any) {
+    console.error('Failed to run recalculation:', error);
+    return res.status(500).json({ message: 'Error during the recalculation process.' });
+  }
+};
