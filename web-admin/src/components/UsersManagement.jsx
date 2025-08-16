@@ -144,7 +144,7 @@ const UsersManagement = () => {
     // Case 3: Render the filtered list of users
     return filteredUsers.map((user) => (
       <tr key={user.id} className="hover:bg-gray-50">
-        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${user.new ? "text-red-600 font-bold" : "text-gray-900"} `}>
           {user.name}
         </td>
         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">

@@ -48,6 +48,7 @@ export async function createUserInDB(userData: Omit<User, "id">) {
     role: userData.role,
     excelFile: userData.excelFile || null,
     canDownloadFiles: true,
+    new:true
   };
 
   // Set user profile and increment user count atomically
