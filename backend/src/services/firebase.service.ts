@@ -38,7 +38,7 @@ export async function createUserInDB(userData: Omit<User, "id">) {
   });
 
   const db = admin.database();
-  const updates: { [key: string]: any } = {};
+  const userProfileRef = db.ref(`users/${userRecord.uid}`);
 
   const profileData = {
     name: userData.name,
@@ -48,15 +48,9 @@ export async function createUserInDB(userData: Omit<User, "id">) {
     role: userData.role,
     excelFile: userData.excelFile || null,
     canDownloadFiles: true,
-    new:true
   };
 
-  // Set user profile and increment user count atomically
-  updates[`/users/${userRecord.uid}`] = profileData;
-  updates[`/analytics/topLevelStats/registeredUsers`] =
-    admin.database.ServerValue.increment(1);
-
-  await db.ref().update(updates);
+  await userProfileRef.set(profileData);
   return userRecord;
 }
 
@@ -83,18 +77,7 @@ export async function createFileMetadataInDB(
     // Note: The 'content' is intentionally omitted here
   };
 
-  const updates: { [key: string]: any } = {};
-
-  // 1. Set the new file's metadata
-  updates[`/files/${location}/${newFileRef.key}`] = dataToSave;
-
-  const recordCount = fileMetadata.contentLength || 0;
-  updates[`/analytics/topLevelStats/totalExcelRecords`] =
-    admin.database.ServerValue.increment(recordCount);
-  updates[`/analytics/topLevelStats/pendingRecords`] =
-    admin.database.ServerValue.increment(recordCount);
-
-  await db.ref().update(updates);
+  await newFileRef.set(dataToSave);
 
   return newFileRef.key!;
 }
@@ -154,27 +137,15 @@ export async function getUserFromDB(userId: string): Promise<User | null> {
 
 export async function updateUserInDB(userId: string, updates: Partial<User>) {
   const db = admin.database();
+  const userProfileRef = db.ref(`users/${userId}`);
 
-  const atomicUpdates: { [key: string]: any } = {};
-
-  // Prepare to update the user's profile
-  atomicUpdates[`/users/${userId}`] = updates;
-
-  // Also prepare to update the user's name in the analytics leaderboard
-  if (updates.name) {
-    atomicUpdates[`/analytics/userLeaderboard/${userId}/userName`] =
-      updates.name;
-  }
-
-  // Atomically update the database
-  await db.ref().update(atomicUpdates);
+  // Update profile in Realtime Database
+  await userProfileRef.update(updates);
 
   // Update corresponding data in Firebase Auth
-  if (updates.name) {
-    await admin.auth().updateUser(userId, {
-      displayName: updates.name,
-    });
-  }
+  await admin.auth().updateUser(userId, {
+    displayName: updates.name,
+  });
 }
 
 export const updateUserPermission = async (
@@ -192,13 +163,8 @@ export async function deleteUserInDB(userId: string) {
 
   // 2. Delete from Realtime Database
   const db = admin.database();
-  const updates: { [key: string]: any } = {};
-
-  updates[`/users/${userId}`] = null;
-  updates[`/analytics/topLevelStats/registeredUsers`] =
-    admin.database.ServerValue.increment(-1);
-
-  await db.ref().update(updates);
+  const userProfileRef = db.ref(`users/${userId}`);
+  await userProfileRef.remove();
 }
 
 export async function getFilesByLocationFromDB(
@@ -294,9 +260,6 @@ export async function assignNewBundleToUser(
     // 2. Mark this bundle as taken in the central registry
     updates[`assignedBundles/${location}/${taluka}/${assignedBundleNo}`] = true;
 
-    updates[`/analytics/topLevelStats/activeBundles`] =
-      admin.database.ServerValue.increment(1);
-
     await db.ref().update(updates);
 
     logger.info(
@@ -347,22 +310,25 @@ export async function saveProcessedRecordsToDB(
 ): Promise<void> {
   const db = admin.database();
 
-  // --- Active Bundle Validation ---
+  // --- VALIDATE ACTIVE BUNDLE ---
   const activeBundleRef = db.ref(
     `userStates/${userId}/activeBundles/${taluka}`
   );
   const activeBundleSnapshot = await activeBundleRef.once("value");
+
   if (!activeBundleSnapshot.exists()) {
     throw new Error(
       `User does not have an active bundle for taluka: ${taluka}.`
     );
   }
+
   const activeBundleData = activeBundleSnapshot.val();
   if (Number(activeBundleData.bundleNo) !== Number(bundleNo)) {
     throw new Error(
       `Submission for bundle #${bundleNo} is not allowed. The active bundle for ${taluka} is #${activeBundleData.bundleNo}.`
     );
   }
+
   if (records.length > 250) {
     throw new Error("Cannot sync more than 250 records at a time.");
   }
@@ -370,17 +336,9 @@ export async function saveProcessedRecordsToDB(
   const updates: { [key: string]: any } = {};
   const seenIntimationNos = new Set<string>();
   let countToIncrement = 0;
-  const user = await getUserFromDB(userId);
-
-  // Get date key once for the entire batch
-  const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istDate = new Date(now.getTime() + istOffset);
-  const dateKey = `${istDate.getUTCFullYear()}-${String(
-    istDate.getUTCMonth() + 1
-  ).padStart(2, "0")}-${String(istDate.getUTCDate()).padStart(2, "0")}`;
 
   for (const record of records) {
+    // --- FIND UNIQUE ID ---
     const uniqueIdKey = Object.keys(record).find(
       (k) =>
         k
@@ -388,31 +346,47 @@ export async function saveProcessedRecordsToDB(
           .toLowerCase()
           .replace(/[\s_-]/g, "") === "uniqueid"
     );
+
     if (!uniqueIdKey || !record[uniqueIdKey]) {
+      logger.error("A record in the batch is missing its unique ID.", {
+        record,
+      });
       throw new Error(`A record in the batch is missing its unique ID.`);
     }
     const uniqueId = record[uniqueIdKey];
 
-    // --- Duplicate checking ---
+    // --- DUPLICATE CHECKING ---
     let isDuplicate = false;
     const intimationNoKey = Object.keys(record).find(
       (k) => k.trim().toLowerCase() === "intimation no"
     );
     const intimationNo = intimationNoKey ? record[intimationNoKey] : null;
+
     if (intimationNo) {
       if (seenIntimationNos.has(intimationNo)) {
         isDuplicate = true;
+        logger.warn(
+          `Duplicate within batch for Intimation No: ${intimationNo}.`
+        );
       } else {
         seenIntimationNos.add(intimationNo);
+      }
+
+      if (!isDuplicate) {
         const snapshot = await db
           .ref(`/intimationNoIndex/${intimationNo}`)
           .once("value");
         if (snapshot.exists()) {
           isDuplicate = true;
+          const originalRecordId = snapshot.val();
+          logger.warn(
+            `Duplicate in DB for Intimation No: ${intimationNo}. Original ID: ${originalRecordId}`
+          );
         }
       }
     }
 
+    // --- PREPARE RECORD ---
     const newRecord: ProcessedRecord = {
       ...record,
       bundleNo,
@@ -421,82 +395,39 @@ export async function saveProcessedRecordsToDB(
       sourceFile,
       taluka,
     };
+
+    // Always save to processedRecords
     const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}/${uniqueId}`;
-
-    // Only perform analytics updates for brand new records
-    const existingRecordSnap = await db.ref(recordPath).once("value");
-    if (!existingRecordSnap.exists()) {
-      countToIncrement++;
-
-      // --- All analytics increment logic is now here ---
-      updates[`/analytics/totalRecords`] =
-        admin.database.ServerValue.increment(1);
-      updates[`/analytics/recordsByLocation/${location}`] =
-        admin.database.ServerValue.increment(1);
-      updates[`/analytics/dailyCounts/${dateKey}`] =
-        admin.database.ServerValue.increment(1);
-
-      const pdfKey = Object.keys(record).find(
-        (k) => k.trim().toLowerCase() === "pdf required"
-      );
-      if (pdfKey && record[pdfKey] === "yes") {
-        updates[`/analytics/totalPdfsRequired`] =
-          admin.database.ServerValue.increment(1);
-        updates[`/analytics/todayStats/pdfRequired`] =
-          admin.database.ServerValue.increment(1);
-      }
-
-      if (user) {
-        updates[`/analytics/userLeaderboard/${userId}/recordsProcessed`] =
-          admin.database.ServerValue.increment(1);
-        updates[`/analytics/userLeaderboard/${userId}/userName`] = user.name;
-      }
-
-      if (sourceFile) {
-        const fileKey = sourceFile.replace(/[.#$[\]]/g, "_");
-        updates[`/analytics/fileStats/${fileKey}/completed`] =
-          admin.database.ServerValue.increment(1);
-        updates[`/analytics/fileStats/${fileKey}/fileName`] = sourceFile;
-      }
-
-      const bundleKey = `${location}-${taluka}-${bundleNo}`;
-      updates[`/analytics/bundleSummaries/${bundleKey}/recordsProcessed`] =
-        admin.database.ServerValue.increment(1);
-      updates[`/analytics/bundleSummaries/${bundleKey}/location`] = location;
-      updates[`/analytics/bundleSummaries/${bundleKey}/taluka`] = taluka;
-      updates[`/analytics/bundleSummaries/${bundleKey}/bundleNo`] = bundleNo;
-    }
-
-    // --- The rest of the saving logic ---
     updates[recordPath] = newRecord;
 
+    // Maintain intimationNo index
     if (intimationNo) {
       updates[`/intimationNoIndex/${intimationNo}`] = uniqueId;
     }
 
+    // Save duplicates separately
     if (isDuplicate) {
-      const newDuplicateKey = db
-        .ref(`/duplicateRecords/${location}/${taluka}`)
-        .push().key;
+      const duplicatesRef = db.ref(`/duplicateRecords/${location}/${taluka}`);
+      const newDuplicateKey = duplicatesRef.push().key;
       updates[`/duplicateRecords/${location}/${taluka}/${newDuplicateKey}`] = {
         ...newRecord,
         reason: "Duplicate record",
       };
-      updates[`/analytics/totalDuplicates`] =
-        admin.database.ServerValue.increment(1);
-      if (user) {
-        updates[`/analytics/userLeaderboard/${userId}/duplicateCount`] =
-          admin.database.ServerValue.increment(1);
-      }
+    }
+
+    // --- COUNT PROTECTION: Only count if not already in processedRecords ---
+    const existingRecordSnap = await db.ref(recordPath).once("value");
+    if (!existingRecordSnap.exists()) {
+      countToIncrement++;
     }
   }
 
-  // Atomically write all updates (records, indexes, and analytics) in one go
+  // --- APPLY ALL UPDATES ---
   if (Object.keys(updates).length > 0) {
     await db.ref().update(updates);
   }
 
-  // Update the user's personal count for the active bundle
+  // --- INCREMENT USER'S BUNDLE COUNT ---
   if (countToIncrement > 0) {
     const userStateCountRef = db.ref(
       `userStates/${userId}/activeBundles/${taluka}/count`
@@ -504,6 +435,8 @@ export async function saveProcessedRecordsToDB(
     await userStateCountRef.set(
       admin.database.ServerValue.increment(countToIncrement)
     );
+  } else {
+    logger.info("No new unique records to increase count for.");
   }
 }
 
@@ -570,15 +503,6 @@ export async function markBundleAsCompleteInDB(
   const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}`;
   updates[`${recordPath}/isUserCompleted`] = true;
   updates[`${recordPath}/userCompletedAt`] = new Date().toISOString();
-
-  const bundleKey = `${location}-${taluka}-${bundleNo}`;
-  updates[`/analytics/bundleSummaries/${bundleKey}/status`] =
-    "Completed by User";
-  updates[`/analytics/bundleSummaries/${bundleKey}/userName`] = user.name;
-
-  // Decrement active bundles count
-  updates[`/analytics/topLevelStats/activeBundles`] =
-    admin.database.ServerValue.increment(-1);
 
   await db.ref().update(updates);
 
@@ -814,12 +738,6 @@ export async function resetUserProgressInDB(
     return currentData;
   });
 
-  // --- NEW: Trigger a full recalculation to ensure stats are accurate ---
-  logger.info(
-    `Triggering analytics recalculation after resetting user ${userId}.`
-  );
-  await recalculateAllAnalyticsInBackend();
-
   return bundleNoToRecycle;
 }
 
@@ -840,19 +758,11 @@ export async function forceCompleteBundleInDB(
 ): Promise<void> {
   const db = admin.database();
   const updates: { [key: string]: any } = {};
-  const user = await getUserFromDB(userId);
 
   const recordPath = `/processedRecords/${location}/${taluka}/bundle-${bundleNo}`;
   updates[`${recordPath}/isForceCompleted`] = true;
   updates[`${recordPath}/forceCompletedBy`] = "admin";
   updates[`${recordPath}/assignedTo`] = userId;
-
-  const bundleKey = `${location}-${taluka}-${bundleNo}`;
-  updates[`/analytics/bundleSummaries/${bundleKey}/status`] =
-    "Force Completed by Admin";
-  if (user) {
-    updates[`/analytics/bundleSummaries/${bundleKey}/userName`] = user.name;
-  }
 
   const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
   const activeBundleSnapshot = await userStateRef.once("value");
@@ -864,9 +774,6 @@ export async function forceCompleteBundleInDB(
     // Convert both values to numbers to prevent type mismatch errors (e.g., 1 === "1").
     if (Number(activeBundle.bundleNo) === Number(bundleNo)) {
       updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
-      // Decrement active bundles count
-      updates[`/analytics/topLevelStats/activeBundles`] =
-        admin.database.ServerValue.increment(-1);
     }
   }
 
@@ -891,20 +798,13 @@ export async function manualAssignBundleToUserInDB(
   const userStateRef = db.ref(`userStates/${userId}/activeBundles/${taluka}`);
   const bundleCounterRef = db.ref(`bundleCounters/${location}/${taluka}`);
 
-  // Step 1: Prepare the atomic update for user state and analytics.
-  const updates: { [key: string]: any } = {};
+  // Step 1: Assign the bundle to the user.
   const newBundle: ActiveBundle = {
     bundleNo: bundleNo,
     count: 0,
     taluka: taluka,
   };
-  updates[`/userStates/${userId}/activeBundles/${taluka}`] = newBundle;
-  // --- Increment the active bundles counter ---
-  updates[`/analytics/topLevelStats/activeBundles`] =
-    admin.database.ServerValue.increment(1);
-
-  // Atomically set the user's bundle and update the analytics.
-  await db.ref().update(updates);
+  await userStateRef.set(newBundle);
 
   // Step 2: Update the central counter to reflect the manual assignment.
   await bundleCounterRef.transaction((currentData: BundleCounter | null) => {
@@ -1305,12 +1205,7 @@ export async function clearUserActiveBundleInDB(
     );
   }
 
-  const updates: { [key: string]: any } = {};
-  updates[`/userStates/${userId}/activeBundles/${taluka}`] = null;
-  updates[`/analytics/topLevelStats/activeBundles`] =
-    admin.database.ServerValue.increment(-1);
-
-  await db.ref().update(updates);
+  await userStateRef.remove();
 }
 
 /**
@@ -1333,21 +1228,7 @@ export async function deleteFileFromDB(
     );
   }
 
-  const fileData = snapshot.val();
-  const recordCount = fileData.content?.length || 0;
-
-  const updates: { [key: string]: any } = {};
-
-  // 1. Mark the file for deletion
-  updates[`/files/${location}/${fileId}`] = null;
-
-  // 2. Decrement the analytics counters
-  updates[`/analytics/topLevelStats/totalExcelRecords`] =
-    admin.database.ServerValue.increment(-recordCount);
-  updates[`/analytics/topLevelStats/pendingRecords`] =
-    admin.database.ServerValue.increment(-recordCount);
-
-  await db.ref().update(updates);
+  await fileRef.remove();
 }
 
 /**
