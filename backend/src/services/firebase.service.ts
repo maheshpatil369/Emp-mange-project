@@ -48,6 +48,7 @@ export async function createUserInDB(userData: Omit<User, "id">) {
     role: userData.role,
     excelFile: userData.excelFile || null,
     canDownloadFiles: true,
+    new:true
   };
 
   await userProfileRef.set(profileData);
