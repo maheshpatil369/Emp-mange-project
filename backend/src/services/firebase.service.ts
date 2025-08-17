@@ -170,23 +170,35 @@ export async function deleteUserInDB(userId: string) {
 
 export async function getFilesByLocationFromDB(
   location: string
-): Promise<{ id: string; name: string; uploadDate: string; size: number }[]> {
+): Promise<{ id: string; name: string; }[]> {
   const db = admin.database();
   const filesRef = db.ref(`files/${location}`);
-  const snapshot = await filesRef.once("value");
 
+  // Step 1: get keys only
+  const snapshot = await filesRef.once("value");
   if (!snapshot.exists()) {
     return [];
   }
 
-  const filesData = snapshot.val();
-  return Object.keys(filesData).map((key) => ({
-    id: key,
-    name: filesData[key].name,
-    uploadDate: filesData[key].uploadDate,
-    size: filesData[key].size,
-  }));
+  const fileIds = Object.keys(snapshot.val());
+
+  // Step 2: fetch only required fields for each file
+  const results = await Promise.all(
+    fileIds.map(async (id) => {
+      const [nameSnap] = await Promise.all([
+        db.ref(`files/${location}/${id}/name`).once("value"),
+      ]);
+
+      return {
+        id,
+        name: nameSnap.val(),
+      };
+    })
+  );
+
+  return results;
 }
+
 
 /**
  * Gets a new, unassigned bundle number and assigns it to a user.
