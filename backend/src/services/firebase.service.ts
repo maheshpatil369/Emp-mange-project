@@ -643,28 +643,31 @@ export async function getActiveBundlesFromDB(
   const user: User = { id: userId, ...userSnapshot.val() };
   const activeBundles = stateSnapshot.val();
 
-  // If there's no assigned Excel file, we can't calculate totals.
+  // If user doesn't have an assigned file, just return bundles as is
   if (!user.excelFile) return activeBundles;
 
-  // Find the source file in the database
-  const fileSnapshot = await db
-    .ref("files")
-    .orderByChild("name")
+  // Look up processing status for this file instead of full content
+  const statusSnapshot = await db
+    .ref("analytics/processingStatusByFile")
+    .orderByChild("fileName")
     .equalTo(user.excelFile)
     .limitToFirst(1)
     .once("value");
-  if (!fileSnapshot.exists()) return activeBundles;
 
-  const fileData = Object.values(fileSnapshot.val())[0] as any;
-  const totalRecordsInFile = fileData.content?.length || 0;
-  const BUNDLE_SIZE = 250; // Assuming a fixed bundle size
+  if (!statusSnapshot.exists()) return activeBundles;
 
-  // Enrich each active bundle with the total count
+  const statusData = Object.values(statusSnapshot.val())[0] as any;
+  const totalRecordsInFile = statusData.total || 0;
+
+  const BUNDLE_SIZE = 250; // Fixed bundle size
+
+  // Enrich each active bundle with total count
   for (const taluka in activeBundles) {
     const bundle = activeBundles[taluka];
     const startIndex = (bundle.bundleNo - 1) * BUNDLE_SIZE;
     const endIndex = startIndex + BUNDLE_SIZE;
-    // Calculate the actual number of records in this specific bundle slice
+
+    // Calculate actual number of records in this slice
     const recordsInThisBundle = Math.min(
       BUNDLE_SIZE,
       totalRecordsInFile - startIndex
