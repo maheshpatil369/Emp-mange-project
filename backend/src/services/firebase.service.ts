@@ -170,34 +170,34 @@ export async function deleteUserInDB(userId: string) {
 
 export async function getFilesByLocationFromDB(
   location: string
-): Promise<{ id: string; name: string; }[]> {
+): Promise<{ id: string; name: string }[]> {
   const db = admin.database();
-  const filesRef = db.ref(`files/${location}`);
+  const filesRef = db.ref("analytics/processingStatusByFile");
 
-  // Step 1: get keys only
+  // Fetch once
   const snapshot = await filesRef.once("value");
   if (!snapshot.exists()) {
     return [];
   }
 
-  const fileIds = Object.keys(snapshot.val());
+  const allEntries = snapshot.val();
 
-  // Step 2: fetch only required fields for each file
-  const results = await Promise.all(
-    fileIds.map(async (id) => {
-      const [nameSnap] = await Promise.all([
-        db.ref(`files/${location}/${id}/name`).once("value"),
-      ]);
-
-      return {
-        id,
-        name: nameSnap.val(),
-      };
-    })
-  );
+  // Filter by location and map to required format
+  const results: { id: string; name: string }[] = [];
+  Object.values<any>(allEntries).forEach((entry: any) => {
+    if (entry.location === location) {
+      results.push({
+        id: entry.file,        // fileId
+        name: entry.fileName,  // fileName
+      });
+    }
+  });
 
   return results;
 }
+
+
+
 
 
 /**
@@ -1308,6 +1308,8 @@ interface FileStats {
   fileName: string;
   total: number;
   completed: number;
+  file:string;
+  location:string;
 }
 
 interface BundleDetails {
@@ -1385,6 +1387,8 @@ export async function recalculateAllAnalyticsInBackend(): Promise<void> {
       totalExcelRecords += file!.content?.length || 0;
       fileStatsMap.set(file!.name, {
         fileName: file!.name,
+        file: fileId,
+        location,
         total: file!.content?.length || 0,
         completed: 0,
       });
