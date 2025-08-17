@@ -168,6 +168,13 @@ export const DataManagementHub = () => {
   );
 };
 
+function parseDate(uploadDate) {
+  const [day, month, year] = uploadDate.split("/");
+  const parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
+
+  return parsedDate
+}
+
 // --- /data-management/:location Page ---
 export const LocationFileManagement = () => {
   const { location } = useParams();
@@ -261,6 +268,7 @@ export const LocationFileManagement = () => {
         </tr>
       );
     }
+
     return files.map((file) => (
       <tr key={file.id} className="hover:bg-gray-50">
         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -270,7 +278,7 @@ export const LocationFileManagement = () => {
           {(file.size / 1024).toFixed(2)} KB
         </td>
         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-          {new Date(file.uploadDate).toLocaleDateString()}
+          {parseDate(file.uploadDate).toLocaleDateString()}
         </td>
         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
           <button

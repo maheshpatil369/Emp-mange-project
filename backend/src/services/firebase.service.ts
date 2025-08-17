@@ -48,7 +48,7 @@ export async function createUserInDB(userData: Omit<User, "id">) {
     role: userData.role,
     excelFile: userData.excelFile || null,
     canDownloadFiles: true,
-    new:true
+    new: true,
   };
 
   await userProfileRef.set(profileData);
@@ -170,7 +170,7 @@ export async function deleteUserInDB(userId: string) {
 
 export async function getFilesByLocationFromDB(
   location: string
-): Promise<{ id: string; name: string }[]> {
+): Promise<{ id: string; name: string; uploadDate:string; size:string;}[]> {
   const db = admin.database();
   const filesRef = db.ref("analytics/processingStatusByFile");
 
@@ -183,22 +183,20 @@ export async function getFilesByLocationFromDB(
   const allEntries = snapshot.val();
 
   // Filter by location and map to required format
-  const results: { id: string; name: string }[] = [];
+  const results: { id: string; name: string; uploadDate:string; size:string; }[] = [];
   Object.values<any>(allEntries).forEach((entry: any) => {
     if (entry.location === location) {
       results.push({
-        id: entry.file,        // fileId
-        name: entry.fileName,  // fileName
+        id: entry.file, // fileId
+        name: entry.fileName, // fileName
+        uploadDate:entry.uploadDate ,
+        size:entry.size
       });
     }
   });
 
   return results;
 }
-
-
-
-
 
 /**
  * Gets a new, unassigned bundle number and assigns it to a user.
@@ -1253,6 +1251,8 @@ export async function deleteFileFromDB(
 // ---------- Types ----------
 interface FileEntry {
   name: string;
+  uploadDate: string;
+  size: string;
   content?: unknown[];
 }
 
@@ -1308,8 +1308,10 @@ interface FileStats {
   fileName: string;
   total: number;
   completed: number;
-  file:string;
-  location:string;
+  file: string;
+  location: string;
+  uploadDate: string;
+  size: string;
 }
 
 interface BundleDetails {
@@ -1391,6 +1393,8 @@ export async function recalculateAllAnalyticsInBackend(): Promise<void> {
         location,
         total: file!.content?.length || 0,
         completed: 0,
+        uploadDate: file!.uploadDate as string,
+        size: file!.size as string,
       });
     }
   }
